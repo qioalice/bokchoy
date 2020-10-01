@@ -26,6 +26,9 @@ import (
 	"github.com/qioalice/ekago/v2/ekasys"
 )
 
+func (b *Bokchoy) isValid() bool {
+	return b != nil && b.wg != nil && b.sema != nil
+}
 
 // queueNames returns the managed queue names.
 func (b *Bokchoy) queueNames() []string {

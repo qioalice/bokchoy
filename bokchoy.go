@@ -158,6 +158,10 @@ func New(ctx context.Context, options ...Option) (*Bokchoy, *ekaerr.Error) {
 // (even nil), the queue will be recreated with provided options.
 func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 
+	if !b.isValid() {
+		return nil
+	}
+
 	b.sema.Lock()
 	defer b.sema.Unlock()
 
@@ -193,6 +197,12 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 
 // Run runs the system and block the current goroutine.
 func (b *Bokchoy) Run(ctx context.Context) *ekaerr.Error {
+
+	if !b.isValid() {
+		return ekaerr.InitializationFailed.
+			New("Bokchoy: Bokchoy is not initialized. " +
+				"Did you just create an object instead of using constructor or initializer?")
+	}
 
 	b.sema.Lock()
 	// Can't defer b.sema.Unlock() cause of b.wg.Wait() at the end of function.
@@ -243,6 +253,10 @@ func (b *Bokchoy) Run(ctx context.Context) *ekaerr.Error {
 // Does nothing if Bokchoy is not running.
 func (b *Bokchoy) Stop(ctx context.Context) {
 
+	if !b.isValid() {
+		return
+	}
+
 	b.sema.Lock()
 	defer b.sema.Unlock()
 
@@ -271,6 +285,10 @@ func (b *Bokchoy) Stop(ctx context.Context) {
 // Does nothing if Bokchoy already running (Run() has called).
 func (b *Bokchoy) Use(sub ...func(Handler) Handler) *Bokchoy {
 
+	if !b.isValid() {
+		return nil
+	}
+
 	b.sema.Lock()
 	defer b.sema.Unlock()
 
@@ -291,6 +309,12 @@ func (b *Bokchoy) Use(sub ...func(Handler) Handler) *Bokchoy {
 // Returns an error of the first queue that can not be emptied.
 // Does nothing (but returns an error) if Bokchoy already running (Run() has called).
 func (b *Bokchoy) Empty(ctx context.Context) *ekaerr.Error {
+
+	if !b.isValid() {
+		return ekaerr.InitializationFailed.
+			New("Bokchoy: Bokchoy is not initialized. " +
+				"Did you just create an object instead of using constructor or initializer?")
+	}
 
 	b.sema.Lock()
 	defer b.sema.Unlock()
@@ -316,6 +340,12 @@ func (b *Bokchoy) Empty(ctx context.Context) *ekaerr.Error {
 // Does nothing (but returns an error) if Bokchoy already running (Run() has called).
 func (b *Bokchoy) ClearAll() *ekaerr.Error {
 
+	if !b.isValid() {
+		return ekaerr.InitializationFailed.
+			New("Bokchoy: Bokchoy is not initialized. " +
+				"Did you just create an object instead of using constructor or initializer?")
+	}
+
 	b.sema.Lock()
 	defer b.sema.Unlock()
 
@@ -339,6 +369,12 @@ func (b *Bokchoy) Publish(
 	*Task,
 	*ekaerr.Error,
 ) {
+	if !b.isValid() {
+		return nil, ekaerr.InitializationFailed.
+			New("Bokchoy: Bokchoy is not initialized. " +
+				"Did you just create an object instead of using constructor or initializer?")
+	}
+
 	return b.Queue(queueName).Publish(ctx, payload, options...)
 }
 
