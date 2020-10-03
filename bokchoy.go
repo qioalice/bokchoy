@@ -109,19 +109,19 @@ func New(ctx context.Context, options ...Option) (*Bokchoy, *ekaerr.Error) {
 		if logger.IsValid() {
 			logger.Debug("Bokchoy.Initialization: " +
 				"Initialize presented Broker...",
-				"bokchoy_init_broker", optionsObject.Broker.String())
+				"bokchoy_broker", optionsObject.Broker.String())
 		}
 
 		if err := optionsObject.Broker.Initialize(ctx); err.IsNotNil() {
 			return nil, err.
 				AddMessage("Bokchoy: Failed to initialize presented Broker").
-				AddFields("bokchoy_init_broker", optionsObject.Broker.String())
+				Throw()
 		}
 
 		if logger.IsValid() {
 			logger.Debug("Bokchoy.Initialization: " +
 				"Initialized successfully. Ready to use.",
-				"bokchoy_init_broker", optionsObject.Broker.String())
+				"bokchoy_broker", optionsObject.Broker.String())
 		}
 	}
 
