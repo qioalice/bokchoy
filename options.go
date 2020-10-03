@@ -1,49 +1,71 @@
+//
+// ORIGINAL PACKAGE
+// ( https://github.com/thoas/bokchoy )
+//
+//     Copyright © 2019. All rights reserved.
+//     Author: Florent Messa
+//     Contacts: florent.messa@gmail.com, https://github.com/thoas
+//     License: https://opensource.org/licenses/MIT
+//
+// HAS BEEN FORKED, HIGHLY MODIFIED AND NOW IS AVAILABLE AS
+// ( https://github.com/qioalice/bokchoy )
+//
+//     Copyright © 2020. All rights reserved.
+//     Author: Ilya Stroy.
+//     Contacts: qioalice@gmail.com, https://github.com/qioalice
+//     License: https://opensource.org/licenses/MIT
+//
+
 package bokchoy
 
 import (
 	"strings"
 	"time"
 
-	"github.com/thoas/bokchoy/logging"
+	"github.com/qioalice/ekago/v2/ekalog"
 )
 
 // Options is the bokchoy options.
 type Options struct {
-	Tracer         Tracer
-	Logger         logging.Logger
-	Concurrency    int
-	MaxRetries     int
-	TTL            time.Duration
-	Countdown      *time.Duration
-	Timeout        time.Duration
-	RetryIntervals []time.Duration
-	Serializer     Serializer
-	Initialize     bool
-	Queues         []string
-	DisableOutput  bool
-	Servers        []Server
-	Broker         Broker
+
+	// --- Required options ---
+
+	Broker            Broker
+	Serializer        Serializer
+
+	// --- Additional options ---
+
+	Logger            *ekalog.Logger
+	loggerIsPresented bool
+
+	Concurrency       int
+	MaxRetries        int
+	TTL               time.Duration
+	Countdown         *time.Duration
+	Timeout           time.Duration
+	RetryIntervals    []time.Duration
+	Initialize        bool
+	Queues            []string
+	DisableOutput     bool
 }
 
-// RetryIntervalsDisplay returns a string representation of the retry intervals.
-func (o Options) RetryIntervalsDisplay() string {
+// retryIntervalsEncode returns a string representation of the retry intervals.
+func (o Options) retryIntervalsEncode() string {
 	intervals := make([]string, len(o.RetryIntervals))
 	for i := range o.RetryIntervals {
 		intervals[i] = o.RetryIntervals[i].String()
 	}
-
 	return strings.Join(intervals, ", ")
 }
 
-// newOptions returns default options.
-func newOptions() *Options {
+func defaultOptions() *Options {
 	opts := &Options{}
 
 	options := []Option{
-		WithConcurrency(defaultConcurrency),
-		WithMaxRetries(defaultMaxRetries),
-		WithTTL(defaultTTL),
-		WithTimeout(defaultTimeout),
+		WithConcurrency(_DEFAULT_CONCURRENCY),
+		WithMaxRetries(_DEFAULT_MAX_RETRIES),
+		WithTTL(_DEFAULT_TTL),
+		WithTimeout(_DEFAULT_TIMEOUT),
 		WithRetryIntervals(defaultRetryIntervals),
 		WithInitialize(true),
 	}
@@ -73,17 +95,17 @@ func WithBroker(broker Broker) Option {
 	}
 }
 
-// WithServers registers new servers to be run.
-func WithServers(servers []Server) Option {
+// WithQueues allows to override queues to run.
+func WithQueues(queues ...string) Option {
 	return func(opts *Options) {
-		opts.Servers = servers
+		opts.Queues = append(opts.Queues, queues...)
 	}
 }
 
 // WithQueues allows to override queues to run.
-func WithQueues(queues []string) Option {
+func WithQueuess(queues []string) Option {
 	return func(opts *Options) {
-		opts.Queues = queues
+		opts.Queues = append(opts.Queues, queues...)
 	}
 }
 
@@ -101,17 +123,11 @@ func WithInitialize(initialize bool) Option {
 	}
 }
 
-// WithTracer defines the Tracer.
-func WithTracer(tracer Tracer) Option {
-	return func(opts *Options) {
-		opts.Tracer = tracer
-	}
-}
-
 // WithLogger defines the Logger.
-func WithLogger(logger logging.Logger) Option {
+func WithLogger(logger *ekalog.Logger) Option {
 	return func(opts *Options) {
 		opts.Logger = logger
+		opts.loggerIsPresented = true
 	}
 }
 
