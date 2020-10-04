@@ -1,427 +1,492 @@
+//
+// ORIGINAL PACKAGE
+// ( https://github.com/thoas/bokchoy )
+//
+//     Copyright © 2019. All rights reserved.
+//     Author: Florent Messa
+//     Contacts: florent.messa@gmail.com, https://github.com/thoas
+//     License: https://opensource.org/licenses/MIT
+//
+// HAS BEEN FORKED, HIGHLY MODIFIED AND NOW IS AVAILABLE AS
+// ( https://github.com/qioalice/bokchoy )
+//
+//     Copyright © 2020. All rights reserved.
+//     Author: Ilya Stroy.
+//     Contacts: qioalice@gmail.com, https://github.com/qioalice
+//     License: https://opensource.org/licenses/MIT
+//
+
 package bokchoy
 
 import (
-	"context"
-	"fmt"
 	"math/rand"
+	"reflect"
 	"sync"
-	"time"
+	"unsafe"
 
-	"github.com/thoas/bokchoy/logging"
+	"github.com/qioalice/ekago/v2/ekaerr"
 
-	"github.com/pkg/errors"
+	"github.com/davecgh/go-spew/spew"
 )
 
-// Queue contains consumers to enqueue.
-type Queue struct {
-	broker Broker
+type (
+	// Queue contains consumers to enqueue.
+	Queue struct {
 
-	name           string
-	serializer     Serializer
-	logger         logging.Logger
-	tracer         Tracer
-	consumers      []*consumer
-	defaultOptions *Options
-	wg             *sync.WaitGroup
-	middlewares    []func(Handler) Handler
-	onFailure      []Handler
-	onSuccess      []Handler
-	onComplete     []Handler
-	onStart        []Handler
+		// WARNING!
+		// DO NOT CHANGE THE ORDER OF FIELDS!
+		// https://golang.org/pkg/sync/atomic/#pkg-note-BUG :
+		//
+		//   > On ARM, x86-32, and 32-bit MIPS,
+		//   > it is the caller's responsibility to arrange for 64-bit alignment
+		//   > of 64-bit words accessed atomically.
+		//   > The first word in a variable or in an allocated struct, array,
+		//   > or slice can be relied upon to be 64-bit aligned.
+		//
+		// Also:
+		// https://stackoverflow.com/questions/28670232/atomic-addint64-causes-invalid-memory-address-or-nil-pointer-dereference/51012703#51012703
+
+		errCounter     int32 // must be aligned, protected by atomic operations
+
+		parent         *Bokchoy
+
+		middlewares    []MiddlewareFunc
+		name           string  // set by Bokchoy.Queue(), immutable
+		consumers      []consumer
+		wg             *sync.WaitGroup
+		onFailure      []HandlerFunc
+		onSuccess      []HandlerFunc
+		onComplete     []HandlerFunc
+		onStart        []HandlerFunc
+
+	}
+)
+
+// Name returns the queue name.
+func (q *Queue) Name() string {
+	if !q.isValid() {
+		return ""
+	}
+	return q.name
 }
 
 // Use appends a new handler middleware to the queue.
-func (q *Queue) Use(sub ...func(Handler) Handler) *Queue {
-	q.middlewares = append(q.middlewares, sub...)
+func (q *Queue) Use(middlewares ...MiddlewareFunc) *Queue {
+	const s = "Bokchoy: Failed to register middleware for consuming queue. "
 
+	if !q.isValid() {
+		return nil
+	}
+
+	if len(middlewares) > 0 {
+		// Filter middlewares. Remain only not-nil.
+		middlewaresBeingRegistered := make([]MiddlewareFunc, 0, len(middlewares))
+		for _, middlewareBeingRegistered := range middlewares {
+			if middlewareBeingRegistered != nil {
+				middlewaresBeingRegistered =
+					append(middlewaresBeingRegistered, middlewareBeingRegistered)
+			}
+		}
+		middlewares = middlewaresBeingRegistered
+	}
+
+	// Now middlewares contains only not nil middlewares.
+
+	if len(middlewares) == 0 {
+		return q
+	}
+
+	q.parent.sema.Lock()
+	defer q.parent.sema.Unlock()
+
+	switch {
+	case q.parent.isStarted && q.parent.logger.IsValid():
+		q.parent.logger.Warn(s + "Consumers already running.",
+			"bokchoy_queue_name", q.name)
+		fallthrough
+
+	case q.parent.isStarted:
+		return q
+	}
+
+	// At the creation, Queue shares the middlewares with its Bokchoy (same RAM).
+	// Thus we implementing copy-on-demand. And now is "demand".
+	// But maybe it has been copied already?
+
+	// WARNING!
+	// DO NOT USE ekadanger.TakeRealAddr().
+	// IT RETURNS A WRONG ADDRESSES IN THIS CASE!
+
+	queueMiddlewaresSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.middlewares))
+	bokchoyMiddlewaresSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.parent.middlewares))
+
+	if queueMiddlewaresSliceHeader.Data == bokchoyMiddlewaresSliceHeader.Data {
+		// https://github.com/go101/go101/wiki/How-to-perfectly-clone-a-slice
+		q.middlewares = append(q.parent.middlewares[:0:0], q.parent.middlewares...)
+	}
+
+	q.middlewares = append(q.middlewares, middlewares...)
 	return q
 }
 
 // OnStart registers a new handler to be executed when a task is started.
-func (q *Queue) OnStart(sub Handler) *Queue {
-	q.OnStartFunc(sub.Handle)
-
-	return q
-}
-
-// OnStartFunc registers a new handler function to be executed when a task is started.
-func (q *Queue) OnStartFunc(f HandlerFunc) *Queue {
-	q.onStart = append(q.onStart, f)
-
-	return q
+func (q *Queue) OnStart(callback HandlerFunc) *Queue {
+	return q.onFunc(TASK_STATUS_PROCESSING, callback)
 }
 
 // OnComplete registers a new handler to be executed when a task is completed.
-func (q *Queue) OnComplete(sub Handler) *Queue {
-	q.OnCompleteFunc(sub.Handle)
-
-	return q
-}
-
-// OnCompleteFunc registers a new handler function to be executed when a task is completed.
-func (q *Queue) OnCompleteFunc(f HandlerFunc) *Queue {
-	q.onComplete = append(q.onComplete, f)
-
-	return q
+func (q *Queue) OnComplete(callback HandlerFunc) *Queue {
+	// TASK_STATUS_INVALID? OnCompleteFunc?
+	// So, it's only for internal purposes.
+	// I don't want to create another one constant that must covers two cases:
+	//  - TASK_STATUS_SUCCEEDED,
+	//  - TASK_STATUS_FAILED.
+	// And do it just for route callbacks at the their registration.
+	// Kinda bad solution, but I left here this comment for you.
+	return q.onFunc(TASK_STATUS_INVALID, callback)
 }
 
 // OnFailure registers a new handler to be executed when a task is failed.
-func (q *Queue) OnFailure(sub Handler) *Queue {
-	return q.OnFailureFunc(sub.Handle)
-}
-
-// OnFailureFunc registers a new handler function to be executed when a task is failed.
-func (q *Queue) OnFailureFunc(f HandlerFunc) *Queue {
-	q.onFailure = append(q.onFailure, f)
-
-	return q
+func (q *Queue) OnFailure(callback HandlerFunc) *Queue {
+	return q.onFunc(TASK_STATUS_FAILED, callback)
 }
 
 // OnSuccess registers a new handler to be executed when a task is succeeded.
-func (q *Queue) OnSuccess(sub Handler) *Queue {
-	return q.OnSuccessFunc(sub.Handle)
-}
-
-// OnSuccessFunc registers a new handler function to be executed when a task is succeeded.
-func (q *Queue) OnSuccessFunc(f HandlerFunc) *Queue {
-	q.onSuccess = append(q.onSuccess, f)
-
-	return q
-}
-
-// Name returns the queue name.
-func (q Queue) Name() string {
-	return q.name
+func (q *Queue) OnSuccess(callback HandlerFunc) *Queue {
+	return q.onFunc(TASK_STATUS_SUCCEEDED, callback)
 }
 
 // Handle registers a new handler to consume tasks.
-func (q *Queue) Handle(sub Handler, options ...Option) *Queue {
-	return q.HandleFunc(sub.Handle, options...)
-}
-
-// HandleFunc registers a new handler function to consume tasks.
-func (q *Queue) HandleFunc(f HandlerFunc, options ...Option) *Queue {
-	opts := q.defaultOptions
-
-	if len(options) > 0 {
-		opts = newOptions()
-		for i := range options {
-			options[i](opts)
-		}
-	}
-
-	for i := 0; i < opts.Concurrency; i++ {
-		consumerName := fmt.Sprintf("consumer:%s#%d", q.name, i+1)
-
-		consumer := &consumer{
-			name:        consumerName,
-			handler:     f,
-			queue:       q,
-			serializer:  q.serializer,
-			logger:      q.logger.With(logging.String("component", consumerName)),
-			tracer:      q.tracer,
-			wg:          q.wg,
-			mu:          &sync.Mutex{},
-			middlewares: q.middlewares,
-		}
-		q.consumers = append(q.consumers, consumer)
-	}
-
-	return q
-}
-
-// start starts consumers.
-func (q *Queue) start(ctx context.Context) {
-	q.logger.Debug(ctx, "Starting consumers...",
-		logging.Object("queue", q))
-
-	for i := range q.consumers {
-		q.consumers[i].start(ctx)
-	}
-
-	q.logger.Debug(ctx, "Consumers started",
-		logging.Object("queue", q))
+func (q *Queue) Handle(callback HandlerFunc, options ...Option) *Queue {
+	return q.handleFunc(callback, options)
 }
 
 // Empty empties queue.
-func (q *Queue) Empty(ctx context.Context) error {
-	queueNames := []string{q.name}
+func (q *Queue) Empty() *ekaerr.Error {
+	const s = "Bokchoy: Failed to empty queue. "
 
-	q.logger.Debug(ctx, "Emptying queue...",
-		logging.Object("queue", q))
-
-	for i := range queueNames {
-		err := q.broker.Empty(queueNames[i])
-		if err != nil {
-			return errors.Wrapf(err, "unable to empty queue %s", queueNames[i])
-		}
+	if !q.isValid() {
+		return ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
 	}
 
-	q.logger.Debug(ctx, "Queue emptied",
-		logging.Object("queue", q))
-
-	return nil
-}
-
-// MarshalLogObject returns the log representation for the queue.
-func (q Queue) MarshalLogObject(enc logging.ObjectEncoder) error {
-	enc.AddString("name", q.name)
-	enc.AddInt("consumers_count", len(q.consumers))
-
-	return nil
-}
-
-// stop stops consumers.
-func (q *Queue) stop(ctx context.Context) {
-	q.logger.Debug(ctx, "Stopping consumers...",
-		logging.Object("queue", q))
-
-	for i := range q.consumers {
-		q.consumers[i].stop(ctx)
+	if err := q.parent.broker.Empty(q.name); err.IsNotNil() {
+		return err.
+			Throw()
 	}
 
-	q.logger.Debug(ctx, "Consumers stopped",
-		logging.Object("queue", q))
-}
+	if q.parent.logger.IsValid() {
+		q.parent.logger.Debug("Bokchoy: Queue has been emptied",
+			"bokchoy_queue_name", q.name)
+	}
 
-// taskKey returns the task key prefixed by the queue name.
-func (q Queue) taskKey(taskID string) string {
-	return fmt.Sprintf("%s:%s", q.name, taskID)
+	return nil
 }
 
 // Cancel cancels a task using its ID.
-func (q *Queue) Cancel(ctx context.Context, taskID string) (*Task, error) {
-	task, err := q.Get(ctx, taskID)
+func (q *Queue) Cancel(taskID string) (*Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to cancel the task. "
+	switch {
+
+	case !q.isValid():
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
+
+	case taskID == "":
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Task ID is empty.").
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
+	}
+
+	task, err := q.Get(taskID)
 	if err != nil {
-		return nil, err
+		return nil, err.
+			AddMessage(s).
+			Throw()
 	}
 
 	task.MarkAsCanceled()
 
-	err = q.Save(ctx, task)
-	if err != nil {
-		return nil, err
+	if err = q.Save(task); err != nil {
+		return nil, err.
+			AddMessage(s).
+			Throw()
 	}
 
 	return task, nil
 }
 
 // List returns tasks from the broker.
-func (q *Queue) List(ctx context.Context) ([]*Task, error) {
-	results, err := q.broker.List(q.name)
-	if err != nil {
-		return nil, err
+func (q *Queue) List() ([]Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to retrieve all tasks from queue. "
+	switch {
+
+	case !q.isValid():
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
 	}
 
-	return q.payloadsToTasks(ctx, results), nil
+	encodedTasks, err := q.parent.broker.List(q.name)
+	if err != nil {
+		return nil, err.
+			AddMessage(s).
+			Throw()
+	}
+
+	tasks, err := q.decodeTasks(encodedTasks)
+	if err.IsNotNil() {
+		return nil, err.
+			AddMessage(s).
+			Throw()
+	}
+
+	return tasks, nil
 }
 
 // Get returns a task instance from the broker with its id.
-func (q *Queue) Get(ctx context.Context, taskID string) (*Task, error) {
-	start := time.Now()
+// Returns nil as Task if requested task is not found.
+func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to retrieve task from queue by its ID. "
+	switch {
 
-	taskKey := q.taskKey(taskID)
-	results, err := q.broker.Get(taskKey)
-	if err != nil {
-		return nil, err
+	case !q.isValid():
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
+
+	case taskID == "":
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Task ID is empty.").
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
 	}
-	if results == nil {
-		return nil, ErrTaskNotFound
+
+	taskKey := TaskKey(q.name, taskID)
+
+	encodedTask, err := q.parent.broker.Get(taskKey)
+	if err.IsNotNil() {
+		return nil, err.
+			AddMessage(s).
+			AddFields(
+				"bokchoy_queue_name", q.name,
+				"bokchoy_task_id", taskID).
+			Throw()
 	}
 
-	task, err := TaskFromPayload(results, q.serializer)
-	if err != nil {
-		return nil, err
+	if encodedTask == nil {
+		return nil, nil
 	}
 
-	q.logger.Debug(ctx, "Task retrieved",
-		logging.Object("queue", q),
-		logging.Duration("duration", time.Since(start)),
-		logging.Object("task", task))
+	task := new(Task)
+	err = task.Deserialize(encodedTask, q.parent.serializer)
+	if err.IsNotNil() {
+		return nil, err.
+			AddMessage(s).
+			AddFields(
+				"bokchoy_queue_name", q.name,
+				"bokchoy_task_key", taskKey)
+	}
 
-	return task, err
+	if q.parent.logger.IsValid() {
+		q.parent.logger.Debug("Bokchoy: Task has been retrieved",
+			"bokchoy_queue_name", q.name,
+			"bokchoy_task_id", task.ID,
+			"bokchoy_task_key", taskKey)
+	}
+
+	return task, nil
 }
 
 // Count returns statistics from queue:
 // * direct: number of waiting tasks
 // * delayed: number of waiting delayed tasks
 // * total: number of total tasks
-func (q *Queue) Count(ctx context.Context) (BrokerStats, error) {
-	return q.broker.Count(q.name)
+func (q *Queue) Count() (BrokerStats, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to get queue stat"
+
+	if !q.isValid() {
+		return BrokerStats{}, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
+	}
+
+	stats, err := q.parent.broker.Count(q.name)
+	if err.IsNotNil() {
+		return BrokerStats{}, err.
+			AddMessage(s).
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
+	}
+
+	return stats, nil
 }
 
 // Consume returns an array of tasks.
-func (q *Queue) Consume(ctx context.Context) ([]*Task, error) {
-	results, err := q.broker.Consume(ctx, q.name, time.Time{})
-	if err != nil {
-		return nil, err
+func (q *Queue) Consume() ([]Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to consume tasks from queue. "
+
+	if !q.isValid() {
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
 	}
 
-	return q.payloadsToTasks(ctx, results), nil
-}
-
-func (q *Queue) payloadsToTasks(ctx context.Context, results []map[string]interface{}) []*Task {
-	tasks := make([]*Task, 0, len(results))
-
-	for i := range results {
-		task, err := TaskFromPayload(results[i], q.serializer)
-		if err != nil {
-			q.tracer.Log(ctx, "Receive error when casting payload to Task", err)
-			continue
-		}
-
-		tasks = append(tasks, task)
+	encodedTasks, err := q.parent.broker.Consume(q.name, 0)
+	if err.IsNotNil() {
+		return nil, err.
+			AddMessage(s).
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
 	}
 
-	return tasks
+	tasks, err := q.decodeTasks(encodedTasks)
+	if err.IsNotNil() {
+		return nil, err.
+			AddMessage(s).
+			Throw()
+	}
+
+	return tasks, nil
 }
 
 // Consumer returns a random consumer.
 func (q *Queue) Consumer() *consumer {
-	rand.Seed(time.Now().Unix())
-
-	n := rand.Int() % len(q.consumers)
-
-	return q.consumers[n]
-}
-
-func (q *Queue) fireEvents(r *Request) error {
-	task := r.Task
-
-	if task.IsStatusProcessing() {
-		for i := range q.onStart {
-			err := q.onStart[i].Handle(r)
-			if err != nil {
-				return errors.Wrapf(err, "unable to handle onStart %s", r)
-			}
-		}
+	if q.isValid() && len(q.consumers) > 0 {
+		n := rand.Int() % len(q.consumers) // don't panic, it's seeded, see init.go
+		return &q.consumers[n]
 	}
-
-	if task.IsStatusSucceeded() {
-		for i := range q.onSuccess {
-			err := q.onSuccess[i].Handle(r)
-			if err != nil {
-				return errors.Wrapf(err, "unable to handle onSuccess %s", r)
-			}
-		}
-	}
-
-	if task.IsStatusFailed() || task.IsStatusCanceled() {
-		for i := range q.onFailure {
-			err := q.onFailure[i].Handle(r)
-			if err != nil {
-				return errors.Wrapf(err, "unable to handle onFailure %s", r)
-			}
-		}
-	}
-
-	if task.Finished() {
-		for i := range q.onComplete {
-			err := q.onComplete[i].Handle(r)
-			if err != nil {
-				return errors.Wrapf(err, "unable to handle onComplete %s", task)
-			}
-		}
-
-	}
-
 	return nil
-}
-
-// HandleRequest handles a request synchronously with a consumer.
-func (q *Queue) HandleRequest(ctx context.Context, r *Request) error {
-	consumer := q.Consumer()
-
-	return consumer.Handle(r)
 }
 
 // Save saves a task to the queue.
-func (q *Queue) Save(ctx context.Context, task *Task) error {
-	var err error
+func (q *Queue) Save(task *Task) *ekaerr.Error {
+	const s = "Bokchoy: Failed to save task. "
 
-	start := time.Now()
-
-	data, err := task.Serialize(q.serializer)
-	if err != nil {
-		return err
+	if !q.isValid() {
+		return ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
 	}
 
-	if task.Finished() {
-		err = q.broker.Set(task.Key(), data, task.TTL)
+	encodedTask, err := task.Serialize(q.parent.serializer)
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
+	}
+
+	if task.IsFinished() {
+		err = q.parent.broker.Set(task.Key(), encodedTask, task.TTL)
 	} else {
-		err = q.broker.Set(task.Key(), data, 0)
+		err = q.parent.broker.Set(task.Key(), encodedTask, 0)
 	}
 
-	if err != nil {
-		return errors.Wrapf(err, "unable to save %s", task)
+	//goland:noinspection GoNilness
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields(
+				"bokchoy_queue_name", q.name,
+				"bokchoy_task_id", task.ID).
+			Throw()
 	}
 
-	q.logger.Debug(ctx, "Task saved",
-		logging.Object("queue", q),
-		logging.Duration("duration", time.Since(start)),
-		logging.Object("task", task))
+	if q.parent.logger.IsValid() {
+		q.parent.logger.Debug("Bokchoy: Task has been saved",
+			"bokchoy_queue_name", q.name,
+			"bokchoy_task_id", task.ID)
+	}
 
 	return nil
 }
 
-// NewTask returns a new task instance from payload and options.
+// NewTask returns a new Task instance from payload and options.
+//
+// Requirements:
+// - Current Queue is valid. Otherwise nil Task is returned.
 func (q *Queue) NewTask(payload interface{}, options ...Option) *Task {
-	opts := q.defaultOptions
-
-	if len(options) > 0 {
-		opts = newOptions()
-		for i := range options {
-			options[i](opts)
-		}
-	}
-
-	task := NewTask(q.name, payload)
-	task.MaxRetries = opts.MaxRetries
-	task.TTL = opts.TTL
-	task.Timeout = opts.Timeout
-	task.RetryIntervals = opts.RetryIntervals
-
-	var eta time.Time
-
-	if opts.Countdown != nil {
-		eta = time.Now().Add(*opts.Countdown).UTC()
-	}
-
-	task.ETA = eta
-
-	return task
+	return q.newTask(payload, options)
 }
 
-// Publish publishes a new payload to the queue.
-func (q *Queue) Publish(ctx context.Context, payload interface{}, options ...Option) (*Task, error) {
-	task := q.NewTask(payload, options...)
+// Publish is a alias for:
+//
+//     task := q.NewTask(ctx, payload, options...)
+//     q.PublishTask(ctx, task)
+//
+func (q *Queue) Publish(payload interface{}, options ...Option) (*Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to publish task to the queue. "
+	switch {
 
-	err := q.PublishTask(ctx, task)
+	case !q.isValid():
+		return nil, ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
+	}
+
+	task := q.newTask(payload, options)
+
+	err := q.PublishTask(task)
 	if err != nil {
-		return nil, err
+		return nil, err.
+			Throw()
 	}
 
 	return task, nil
 }
 
-// PublishTask publishes a new task to the queue.
-func (q *Queue) PublishTask(ctx context.Context, task *Task) error {
-	data, err := task.Serialize(q.serializer)
-	if err != nil {
-		return err
+// PublishTask publishes a new task to the current Queue.
+func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
+	const s = "Bokchoy: Failed to publish task to the queue. "
+	switch {
+
+	case !q.isValid():
+		return ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
 	}
 
-	start := time.Now()
+	// No need to check task,
+	// because task.Serialize already has all checks.
 
-	err = q.broker.Publish(q.name, task.ID, data, task.ETA)
-	if err != nil {
-		return errors.Wrapf(err, "unable to publish %s", task)
+	serializedTask, err := task.Serialize(q.parent.serializer)
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
 	}
 
-	q.logger.Debug(ctx, "Task published",
-		logging.Object("queue", q),
-		logging.Duration("duration", time.Since(start)),
-		logging.Object("task", task))
+	err = q.parent.broker.Publish(q.name, task.ID, serializedTask, task.ETA)
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields(
+				"bokchoy_queue_name", q.name,
+				"bokchoy_task_id", task.ID,
+				"bokchoy_task_user_payload", spew.Sdump(task.Payload)).
+			Throw()
+	}
+
+	if q.parent.logger.IsValid() {
+		q.parent.logger.Debug("Bokchoy: Tash has been published",
+			"bokchoy_queue_name", q.name,
+			"bokchoy_task_id", task.ID,
+			"bokchoy_task_user_payload", spew.Sdump(task.Payload))
+	}
 
 	return nil
 }
