@@ -18,6 +18,14 @@
 
 package bokchoy
 
+import (
+	// queue.go contains math/rand calls.
+	// ekagen magically initializes RNG the absolutely incredible way.
+	_ "github.com/qioalice/ekago/v2/ekagen"
+)
+
 func init() {
+	initDefaultOptions()
+	initIsTTY()
 	createPackageLevelClient()
 }
