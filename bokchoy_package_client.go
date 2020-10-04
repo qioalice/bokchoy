@@ -19,12 +19,10 @@
 package bokchoy
 
 import (
-	"context"
-
 	"github.com/qioalice/ekago/v2/ekaerr"
 )
 
-func Init(ctx context.Context, options ...Option) *ekaerr.Error {
+func Init(options ...Option) *ekaerr.Error {
 
 	defaultClient.sema.Lock()
 	defer defaultClient.sema.Unlock()
@@ -35,7 +33,7 @@ func Init(ctx context.Context, options ...Option) *ekaerr.Error {
 			Throw()
 	}
 
-	defaultClient_, err := New(ctx, options...)
+	defaultClient_, err := New(options...)
 	if err.IsNotNil() {
 		return err.
 			AddMessage("Bokchoy: Failed to initialize default client").
@@ -50,21 +48,21 @@ func GetQueue(name string, options ...Option) *Queue {
 	return defaultClient.Queue(name, options...)
 }
 
-func Run(ctx context.Context) *ekaerr.Error {
-	return defaultClient.Run(ctx).
+func Run() *ekaerr.Error {
+	return defaultClient.Run().
 		Throw()
 }
 
-func Stop(ctx context.Context) {
-	defaultClient.Stop(ctx)
+func Stop() {
+	defaultClient.Stop()
 }
 
-func Use(sub ...func(Handler) Handler) *Bokchoy {
-	return defaultClient.Use(sub...)
+func Use(middlewares ...MiddlewareFunc) *Bokchoy {
+	return defaultClient.Use(middlewares...)
 }
 
-func Empty(ctx context.Context) *ekaerr.Error {
-	return defaultClient.Empty(ctx).
+func Empty() *ekaerr.Error {
+	return defaultClient.Empty().
 		Throw()
 }
 
@@ -75,7 +73,6 @@ func ClearAll() *ekaerr.Error {
 
 func Publish(
 
-	ctx       context.Context,
 	queueName string,
 	payload   interface{},
 	options   ...Option,
@@ -83,15 +80,11 @@ func Publish(
 	*Task,
 	*ekaerr.Error,
 ) {
-	task, err := defaultClient.Publish(ctx, queueName, payload, options...)
+	task, err := defaultClient.Publish(queueName, payload, options...)
 	return task, err.
 		Throw()
 }
 
-func Handle(queueName string, sub Handler, options ...Option) {
-	defaultClient.Handle(queueName, sub, options...)
-}
-
-func HandleFunc(queueName string, f HandlerFunc, options ...Option) {
-	defaultClient.HandleFunc(queueName, f, options...)
+func Handle(queueName string, callback HandlerFunc, options ...Option) {
+	defaultClient.Handle(queueName, callback, options...)
 }

@@ -19,7 +19,6 @@
 package bokchoy
 
 import (
-	"context"
 	"strings"
 	"sync"
 
@@ -37,17 +36,21 @@ type (
 		defaultOptions *Options
 		broker         Broker
 		queues         map[string]*Queue
-		middlewares    []func(Handler) Handler
+		middlewares    []MiddlewareFunc
 		serializer     Serializer
 		logger         *ekalog.Logger
 		isStarted      bool
+
+		queueNamesWithDuplicateHandlers []string
 	}
 )
 
 // New initializes a new Bokchoy instance.
-func New(ctx context.Context, options ...Option) (*Bokchoy, *ekaerr.Error) {
+func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 
-	optionsObject := defaultOptions()
+	defaultOptionsCopy := *defaultOptions
+	optionsObject := &defaultOptionsCopy
+
 	for i, n := 0, len(options); i < n; i++ {
 		if options[i] != nil {
 			options[i](optionsObject)
@@ -101,6 +104,8 @@ func New(ctx context.Context, options ...Option) (*Bokchoy, *ekaerr.Error) {
 			"Do you already initialize your broker manually?")
 	}
 
+	// todo TTL <= 0 -> immortal tasks overflow RAM
+
 	// Options has been validated.
 	// It's OK and safe to proceed.
 
@@ -112,7 +117,7 @@ func New(ctx context.Context, options ...Option) (*Bokchoy, *ekaerr.Error) {
 				"bokchoy_broker", optionsObject.Broker.String())
 		}
 
-		if err := optionsObject.Broker.Initialize(ctx); err.IsNotNil() {
+		if err := optionsObject.Broker.Initialize(); err.IsNotNil() {
 			return nil, err.
 				AddMessage("Bokchoy: Failed to initialize presented Broker").
 				Throw()
@@ -180,13 +185,9 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 	queue, ok := b.queues[name]
 	if !ok {
 		queue = &Queue{
-			name:           name,
-			broker:         b.broker,
-			serializer:     b.serializer,
-			logger:         b.logger.With("bokchoy_queue_name", name),
-			wg:             b.wg,
-			defaultOptions: b.defaultOptions,
-			middlewares:    b.middlewares,
+			name:        name,
+			wg:          b.wg,
+			middlewares: b.middlewares,
 		}
 
 		b.queues[name] = queue
@@ -196,7 +197,7 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 }
 
 // Run runs the system and block the current goroutine.
-func (b *Bokchoy) Run(ctx context.Context) *ekaerr.Error {
+func (b *Bokchoy) Run() *ekaerr.Error {
 
 	if !b.isValid() {
 		return ekaerr.InitializationFailed.
@@ -230,7 +231,7 @@ func (b *Bokchoy) Run(ctx context.Context) *ekaerr.Error {
 	}
 
 	for _, queue := range b.queues {
-		queue.start(ctx)
+		queue.start()
 	}
 
 	b.isStarted = true
@@ -251,7 +252,7 @@ func (b *Bokchoy) Run(ctx context.Context) *ekaerr.Error {
 // So, there is no returned error object, cause it never fail.
 //
 // Does nothing if Bokchoy is not running.
-func (b *Bokchoy) Stop(ctx context.Context) {
+func (b *Bokchoy) Stop() {
 
 	if !b.isValid() {
 		return
@@ -271,8 +272,8 @@ func (b *Bokchoy) Stop(ctx context.Context) {
 			"bokchoy_queues_list", queuesList)
 	}
 
-	for i := range b.queues {
-		b.queues[i].stop(ctx) // can not fail
+	for _, queue := range b.queues {
+		queue.stop() // can not fail
 	}
 
 	if b.logger.IsValid() {
@@ -283,7 +284,7 @@ func (b *Bokchoy) Stop(ctx context.Context) {
 
 // Use append a new middleware to the system.
 // Does nothing if Bokchoy already running (Run() has called).
-func (b *Bokchoy) Use(sub ...func(Handler) Handler) *Bokchoy {
+func (b *Bokchoy) Use(middlewares ...MiddlewareFunc) *Bokchoy {
 
 	if !b.isValid() {
 		return nil
@@ -296,9 +297,9 @@ func (b *Bokchoy) Use(sub ...func(Handler) Handler) *Bokchoy {
 		return b
 	}
 
-	for i, n := 0, len(sub); i < n; i++ {
-		if sub != nil {
-			b.middlewares = append(b.middlewares, sub...)
+	for i, n := 0, len(middlewares); i < n; i++ {
+		if middlewares[i] != nil {
+			b.middlewares = append(b.middlewares, middlewares[i])
 		}
 	}
 
@@ -308,7 +309,7 @@ func (b *Bokchoy) Use(sub ...func(Handler) Handler) *Bokchoy {
 // Empty empties initialized queues.
 // Returns an error of the first queue that can not be emptied.
 // Does nothing (but returns an error) if Bokchoy already running (Run() has called).
-func (b *Bokchoy) Empty(ctx context.Context) *ekaerr.Error {
+func (b *Bokchoy) Empty() *ekaerr.Error {
 
 	if !b.isValid() {
 		return ekaerr.InitializationFailed.
@@ -326,7 +327,7 @@ func (b *Bokchoy) Empty(ctx context.Context) *ekaerr.Error {
 	}
 
 	for _, queue := range b.queues {
-		if err := queue.Empty(ctx); err.IsNotNil() {
+		if err := queue.Empty(); err.IsNotNil() {
 			return err.
 				AddMessage("Bokchoy: Failed to empty all queues").
 				Throw()
@@ -361,7 +362,6 @@ func (b *Bokchoy) ClearAll() *ekaerr.Error {
 // Publish publishes a new payload to a queue.
 func (b *Bokchoy) Publish(
 
-	ctx       context.Context,
 	queueName string,
 	payload   interface{},
 	options   ...Option,
@@ -375,15 +375,10 @@ func (b *Bokchoy) Publish(
 				"Did you just create an object instead of using constructor or initializer?")
 	}
 
-	return b.Queue(queueName).Publish(ctx, payload, options...)
+	return b.Queue(queueName).Publish(payload, options...)
 }
 
 // Handle registers a new handler to consume tasks for a queue.
-func (b *Bokchoy) Handle(queueName string, sub Handler, options ...Option) {
-	b.HandleFunc(queueName, sub.Handle, options...)
-}
-
-// HandleFunc registers a new handler function to consume tasks for a queue.
-func (b *Bokchoy) HandleFunc(queueName string, f HandlerFunc, options ...Option) {
-	b.Queue(queueName).HandleFunc(f, options...)
+func (b *Bokchoy) Handle(queueName string, callback HandlerFunc, options ...Option) {
+	b.Queue(queueName).handleFunc(callback, options)
 }
