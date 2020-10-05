@@ -29,11 +29,19 @@ import (
 	"github.com/modern-go/reflect2" // fast than reflect (w/ caching)
 )
 
-type JSONSerializer struct {}
+type (
+	serializerJSON struct {}
+)
 
-var _ Serializer = (*JSONSerializer)(nil)
+var (
+	defaultSerializerJSON Serializer = new(serializerJSON)
+)
 
-func (_ JSONSerializer) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
+func DefaultSerializerJSON() Serializer {
+	return defaultSerializerJSON
+}
+
+func (_ *serializerJSON) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 	data, legacyErr := jsoniter.Marshal(v)
 	if legacyErr != nil {
 
@@ -43,7 +51,7 @@ func (_ JSONSerializer) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 		}
 
 		return nil, ekaerr.InternalError.
-			Wrap(legacyErr, "Bokchoy.JsonSerializer: Failed to serialize").
+			Wrap(legacyErr, "Bokchoy.serializerJSON: Failed to serialize").
 			AddFields(
 				"bokchoy_serializer_obj_data", spew.Sdump(v),
 				"bokchoy_serializer_obj_type", vType).
@@ -53,7 +61,7 @@ func (_ JSONSerializer) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 	return data, nil
 }
 
-func (_ JSONSerializer) Loads(data []byte, v interface{}) *ekaerr.Error {
+func (_ *serializerJSON) Loads(data []byte, v interface{}) *ekaerr.Error {
 	legacyErr := jsoniter.Unmarshal(data, v)
 	if legacyErr != nil {
 
@@ -64,7 +72,7 @@ func (_ JSONSerializer) Loads(data []byte, v interface{}) *ekaerr.Error {
 		}
 
 		return ekaerr.InternalError.
-			Wrap(legacyErr, "Bokchoy.JsonSerializer: Failed to deserialize").
+			Wrap(legacyErr, "Bokchoy.serializerJSON: Failed to deserialize").
 			AddFields(
 				"bokchoy_serializer_raw_data_as_hex", hex.EncodeToString(data),
 				"bokchoy_serializer_destination_type", vType,
@@ -75,10 +83,10 @@ func (_ JSONSerializer) Loads(data []byte, v interface{}) *ekaerr.Error {
 	return nil
 }
 
-func (_ JSONSerializer) IsHumanReadable() bool {
+func (_ *serializerJSON) IsHumanReadable() bool {
 	return true
 }
 
-func (_ JSONSerializer) Name() string {
+func (_ *serializerJSON) Name() string {
 	return "JSON, based on: https://github.com/json-iterator/go"
 }
