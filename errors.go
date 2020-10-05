@@ -1,17 +1,49 @@
+//
+// ORIGINAL PACKAGE
+// ( https://github.com/thoas/bokchoy )
+//
+//     Copyright © 2019. All rights reserved.
+//     Author: Florent Messa
+//     Contacts: florent.messa@gmail.com, https://github.com/thoas
+//     License: https://opensource.org/licenses/MIT
+//
+// HAS BEEN FORKED, HIGHLY MODIFIED AND NOW IS AVAILABLE AS
+// ( https://github.com/qioalice/bokchoy )
+//
+//     Copyright © 2020. All rights reserved.
+//     Author: Ilya Stroy.
+//     Contacts: qioalice@gmail.com, https://github.com/qioalice
+//     License: https://opensource.org/licenses/MIT
+//
+
 package bokchoy
 
-import "fmt"
-
-var (
-	// ErrAttributeError is returned when an attribute is not found.
-	ErrAttributeError = fmt.Errorf("Attribute error")
-
-	// ErrTaskCanceled is returned when a task is canceled.
-	ErrTaskCanceled = fmt.Errorf("Task canceled")
-
-	// ErrTaskNotFound is returned when a task is not found.
-	ErrTaskNotFound = fmt.Errorf("Task not found")
-
-	// ErrNoQueueToRun is returned when no queue has been found to run.
-	ErrNoQueueToRun = fmt.Errorf("No queue to run")
+import (
+	"github.com/qioalice/ekago/v2/ekaerr"
 )
+
+type (
+	ekaerrWrapped ekaerr.Error
+)
+
+func (ew *ekaerrWrapped) Error() string {
+	return "It's a wrapped *ekaerr.Error. You must not to see this message. Cast instead."
+}
+
+func wrapEkaerr(err *ekaerr.Error) error {
+	if err.IsNil() {
+		return nil
+	} else {
+		return (*ekaerrWrapped)(err)
+	}
+}
+
+func extractEkaerr(legacyErr error) *ekaerr.Error {
+	if legacyErr == nil {
+		return nil
+	}
+	if ew, ok := legacyErr.(*ekaerrWrapped); ok && ew != nil {
+		return (*ekaerr.Error)(ew)
+	}
+	return nil
+}
