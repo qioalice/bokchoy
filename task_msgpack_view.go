@@ -19,8 +19,9 @@
 package bokchoy
 
 import (
-	"github.com/qioalice/ekago/v2/ekaerr"
 	"unsafe"
+
+	"github.com/qioalice/ekago/v2/ekaerr"
 )
 
 type (
@@ -43,13 +44,13 @@ type (
 		PublishedAt    int64         `msg:"pl"` // real type: ekatime.Timestamp
 		StartedAt      int64         `msg:"st"`
 		ProcessedAt    int64         `msg:"pr"`
-		status         int8          `msg:"s"`
-		oldStatus      int8          `msg:"s0"`
+		Status         int8          `msg:"s"`
+		OldStatus      int8          `msg:"s0"`
 		MaxRetries     int8          `msg:"re"`
-		Error          *ekaerr.Error `           msg:"-"`
-		Panic          interface{}   `           msg:"-"`
-		Payload        interface{}   `           msg:"-"`
-		payloadEncoded []byte        `msg:"p"`
+		error          *ekaerr.Error `           msg:"-"`
+		panic          interface{}   `           msg:"-"`
+		payload        interface{}   `           msg:"-"`
+		PayloadEncoded []byte        `msg:"p"`
 		payloadOldAddr uintptr       `           msg:"-"`
 		ExecTime       int64         `msg:"ex"`
 		TTL            int64         `msg:"tl"` // real type: time.Duration

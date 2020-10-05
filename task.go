@@ -203,7 +203,8 @@ func (t *Task) Deserialize(data []byte, userPayloadSerializer Serializer) *ekaer
 
 	case len(data) == 0:
 		return ekaerr.IllegalArgument.
-			New(s + "Task encoded data is empty.")
+			New(s + "Task encoded data is empty.").
+			Throw()
 
 	case userPayloadSerializer == nil:
 		return ekaerr.IllegalArgument.

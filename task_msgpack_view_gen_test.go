@@ -9,7 +9,7 @@ import (
 	"github.com/tinylib/msgp/msgp"
 )
 
-func TestMarshalUnmarshalTaskMsgpackView(t *testing.T) {
+func TestMarshalUnmarshaltaskMsgpackView(t *testing.T) {
 	v := taskMsgpackView{}
 	bts, err := v.MarshalMsg(nil)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestMarshalUnmarshalTaskMsgpackView(t *testing.T) {
 	}
 }
 
-func BenchmarkMarshalMsgTaskMsgpackView(b *testing.B) {
+func BenchmarkMarshalMsgtaskMsgpackView(b *testing.B) {
 	v := taskMsgpackView{}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -41,7 +41,7 @@ func BenchmarkMarshalMsgTaskMsgpackView(b *testing.B) {
 	}
 }
 
-func BenchmarkAppendMsgTaskMsgpackView(b *testing.B) {
+func BenchmarkAppendMsgtaskMsgpackView(b *testing.B) {
 	v := taskMsgpackView{}
 	bts := make([]byte, 0, v.Msgsize())
 	bts, _ = v.MarshalMsg(bts[0:0])
@@ -53,7 +53,7 @@ func BenchmarkAppendMsgTaskMsgpackView(b *testing.B) {
 	}
 }
 
-func BenchmarkUnmarshalTaskMsgpackView(b *testing.B) {
+func BenchmarkUnmarshaltaskMsgpackView(b *testing.B) {
 	v := taskMsgpackView{}
 	bts, _ := v.MarshalMsg(nil)
 	b.ReportAllocs()
@@ -67,14 +67,14 @@ func BenchmarkUnmarshalTaskMsgpackView(b *testing.B) {
 	}
 }
 
-func TestEncodeDecodeTaskMsgpackView(t *testing.T) {
+func TestEncodeDecodetaskMsgpackView(t *testing.T) {
 	v := taskMsgpackView{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
 
 	m := v.Msgsize()
 	if buf.Len() > m {
-		t.Log("WARNING: TestEncodeDecodeTaskMsgpackView Msgsize() is inaccurate")
+		t.Log("WARNING: TestEncodeDecodetaskMsgpackView Msgsize() is inaccurate")
 	}
 
 	vn := taskMsgpackView{}
@@ -91,7 +91,7 @@ func TestEncodeDecodeTaskMsgpackView(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeTaskMsgpackView(b *testing.B) {
+func BenchmarkEncodetaskMsgpackView(b *testing.B) {
 	v := taskMsgpackView{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
@@ -105,7 +105,7 @@ func BenchmarkEncodeTaskMsgpackView(b *testing.B) {
 	en.Flush()
 }
 
-func BenchmarkDecodeTaskMsgpackView(b *testing.B) {
+func BenchmarkDecodetaskMsgpackView(b *testing.B) {
 	v := taskMsgpackView{}
 	var buf bytes.Buffer
 	msgp.Encode(&buf, &v)
