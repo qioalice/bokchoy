@@ -57,8 +57,9 @@ func Stop() {
 	defaultClient.Stop()
 }
 
-func Use(middlewares ...MiddlewareFunc) *Bokchoy {
-	return defaultClient.Use(middlewares...)
+func Use(queueName string, handlers ...HandlerFunc) *Bokchoy {
+	// TODO: Too much handlers slice copying
+	return defaultClient.Use(queueName, handlers...)
 }
 
 func Empty() *ekaerr.Error {
@@ -83,8 +84,4 @@ func Publish(
 	task, err := defaultClient.Publish(queueName, payload, options...)
 	return task, err.
 		Throw()
-}
-
-func Handle(queueName string, callback HandlerFunc, options ...Option) {
-	defaultClient.Handle(queueName, callback, options...)
 }
