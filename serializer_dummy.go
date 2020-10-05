@@ -26,6 +26,14 @@ type (
 	serializerDummy struct {}
 )
 
+var (
+	defaultSerializerDummy Serializer = new(serializerDummy)
+)
+
+func DefaultSerializerDummy() Serializer {
+	return defaultSerializerDummy
+}
+
 func (_ *serializerDummy) Dumps(_ interface{}) ([]byte, *ekaerr.Error) {
 	return nil, nil
 }
