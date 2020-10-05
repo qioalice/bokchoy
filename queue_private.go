@@ -110,7 +110,6 @@ func (q *Queue) handleFunc(f HandlerFunc, options []Option) *Queue {
 		q.consumers = append(q.consumers, consumer{
 			idx: i,
 			queue: q,
-			handler: f,
 		})
 	}
 
@@ -133,7 +132,10 @@ func (q *Queue) start() {
 		return
 	}
 
+	q.consumers = make([]consumer, q.options.Concurrency)
 	for i, n := 0, len(q.consumers); i < n; i++ {
+		q.consumers[i].queue = q
+		q.consumers[i].idx = int8(i)
 		q.consumers[i].requestStart()
 	}
 
@@ -164,58 +166,6 @@ func (q *Queue) stop() {
 			"bokchoy_queue_name", q.name,
 			"bokchoy_queue_consumers_number", len(q.consumers))
 	}
-}
-
-func (q *Queue) fireEvents(task *Task) *ekaerr.Error {
-	const s = "Bokchoy: Failed to call task status changed callbacks. "
-
-	var callbacksToBeCalled *[]HandlerFunc
-
-	oldStatus := TASK_STATUS_INVALID
-	i := 0
-
-	for ; oldStatus != task.status && i < _TASK_MAX_STATUS_CHANGED_CALLBACKS_FIRING; i++ {
-		switch task.status {
-
-		case TASK_STATUS_PROCESSING: callbacksToBeCalled = &q.onStart
-		case TASK_STATUS_SUCCEEDED:  callbacksToBeCalled = &q.onSuccess
-		case TASK_STATUS_FAILED:     callbacksToBeCalled = &q.onFailure
-		case TASK_STATUS_CANCELLED:  callbacksToBeCalled = &q.onFailure
-		}
-
-		oldStatus = task.status
-
-		//goland:noinspection GoNilness
-		for i, n := 0, len(*callbacksToBeCalled); i < n; i++ {
-			if err := (*callbacksToBeCalled)[i](task); err.IsNotNil() {
-				return err.
-					AddMessage(s).
-					AddFields("bokchoy_task_status", oldStatus.String()).
-					Throw()
-			}
-		}
-
-		if task.IsFinished() {
-			oldStatus = task.status
-			for i, n := 0, len(q.onComplete); i < n; i++ {
-				if err := q.onComplete[i](task); err.IsNotNil() {
-					return err.
-						AddMessage(s).
-						AddFields("bokchoy_task_status", oldStatus.String()).
-						Throw()
-				}
-			}
-		}
-	}
-
-	if oldStatus != task.status && i == _TASK_MAX_STATUS_CHANGED_CALLBACKS_FIRING {
-		return ekaerr.Interrupted.
-			New(s + "Too many status changes.").
-			AddFields("bokchoy_last_status", task.status.String()).
-			Throw()
-	}
-
-	return nil
 }
 
 func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
@@ -270,14 +220,14 @@ func (q *Queue) save(task *Task) *ekaerr.Error {
 			AddMessage(s).
 			AddFields(
 				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", task.ID).
+				"bokchoy_task_id", task.id).
 			Throw()
 	}
 
 	if q.parent.logger.IsValid() {
 		q.parent.logger.Debug("Bokchoy: Task has been saved",
 			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.ID)
+			"bokchoy_task_id", task.id)
 	}
 
 	return nil
@@ -294,16 +244,16 @@ func (q *Queue) newTask(payload interface{}, options []Option) *Task {
 		return nil
 	}
 
-	optionsObject := q.parent.defaultOptions
+	optionsObject := q.options
 	if len(options) > 0 {
-		queueOptionsCopy := *q.parent.defaultOptions
+		queueOptionsCopy := *q.options
 		optionsObject = &queueOptionsCopy
 		optionsObject.apply(options)
 	}
 
 	task := &Task{
-		ID:          ID(),
-		QueueName:   q.name,
+		id:          ID(),
+		queueName:   q.name,
 		Payload:     payload,
 		status:      TASK_STATUS_WAITING,
 		PublishedAt: ekatime.Now(),

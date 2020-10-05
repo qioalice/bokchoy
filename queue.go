@@ -49,15 +49,18 @@ type (
 
 		parent         *Bokchoy
 
-		middlewares    []MiddlewareFunc
+		options        *Options
+
 		name           string  // set by Bokchoy.Queue(), immutable
 		consumers      []consumer
 		wg             *sync.WaitGroup
+
+		handlers       []HandlerFunc
+
 		onFailure      []HandlerFunc
 		onSuccess      []HandlerFunc
 		onComplete     []HandlerFunc
 		onStart        []HandlerFunc
-
 	}
 )
 
@@ -70,28 +73,28 @@ func (q *Queue) Name() string {
 }
 
 // Use appends a new handler middleware to the queue.
-func (q *Queue) Use(middlewares ...MiddlewareFunc) *Queue {
+func (q *Queue) Use(handler ...HandlerFunc) *Queue {
 	const s = "Bokchoy: Failed to register middleware for consuming queue. "
 
 	if !q.isValid() {
 		return nil
 	}
 
-	if len(middlewares) > 0 {
+	if len(handler) > 0 {
 		// Filter middlewares. Remain only not-nil.
-		middlewaresBeingRegistered := make([]MiddlewareFunc, 0, len(middlewares))
-		for _, middlewareBeingRegistered := range middlewares {
-			if middlewareBeingRegistered != nil {
-				middlewaresBeingRegistered =
-					append(middlewaresBeingRegistered, middlewareBeingRegistered)
+		handlersBeingRegistered := make([]HandlerFunc, 0, len(handler))
+		for _, handlerBeingRegistered := range handlersBeingRegistered {
+			if handlerBeingRegistered != nil {
+				handlersBeingRegistered =
+					append(handlersBeingRegistered, handlerBeingRegistered)
 			}
 		}
-		middlewares = middlewaresBeingRegistered
+		handler = handlersBeingRegistered
 	}
 
 	// Now middlewares contains only not nil middlewares.
 
-	if len(middlewares) == 0 {
+	if len(handler) == 0 {
 		return q
 	}
 
@@ -116,15 +119,15 @@ func (q *Queue) Use(middlewares ...MiddlewareFunc) *Queue {
 	// DO NOT USE ekadanger.TakeRealAddr().
 	// IT RETURNS A WRONG ADDRESSES IN THIS CASE!
 
-	queueMiddlewaresSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.middlewares))
-	bokchoyMiddlewaresSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.parent.middlewares))
+	queueHandlersSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.handlers))
+	bokchoyHandlersSliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&q.parent.handlers))
 
-	if queueMiddlewaresSliceHeader.Data == bokchoyMiddlewaresSliceHeader.Data {
+	if queueHandlersSliceHeader.Data == bokchoyHandlersSliceHeader.Data {
 		// https://github.com/go101/go101/wiki/How-to-perfectly-clone-a-slice
-		q.middlewares = append(q.parent.middlewares[:0:0], q.parent.middlewares...)
+		q.handlers = append(q.parent.handlers[:0:0], q.parent.handlers...)
 	}
 
-	q.middlewares = append(q.middlewares, middlewares...)
+	q.handlers = append(q.handlers, handler...)
 	return q
 }
 
@@ -153,11 +156,6 @@ func (q *Queue) OnFailure(callback HandlerFunc) *Queue {
 // OnSuccess registers a new handler to be executed when a task is succeeded.
 func (q *Queue) OnSuccess(callback HandlerFunc) *Queue {
 	return q.onFunc(TASK_STATUS_SUCCEEDED, callback)
-}
-
-// Handle registers a new handler to consume tasks.
-func (q *Queue) Handle(callback HandlerFunc, options ...Option) *Queue {
-	return q.handleFunc(callback, options)
 }
 
 // Empty empties queue.
@@ -297,7 +295,7 @@ func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 	if q.parent.logger.IsValid() {
 		q.parent.logger.Debug("Bokchoy: Task has been retrieved",
 			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.ID,
+			"bokchoy_task_id", task.id,
 			"bokchoy_task_key", taskKey)
 	}
 
@@ -416,13 +414,13 @@ func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
 			Throw()
 	}
 
-	err = q.parent.broker.Publish(q.name, task.ID, serializedTask, task.ETA)
+	err = q.parent.broker.Publish(q.name, task.id, serializedTask, task.ETA)
 	if err.IsNotNil() {
 		return err.
 			AddMessage(s).
 			AddFields(
 				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", task.ID,
+				"bokchoy_task_id", task.id,
 				"bokchoy_task_user_payload", spew.Sdump(task.Payload)).
 			Throw()
 	}
@@ -430,7 +428,7 @@ func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
 	if q.parent.logger.IsValid() {
 		q.parent.logger.Debug("Bokchoy: Tash has been published",
 			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.ID,
+			"bokchoy_task_id", task.id,
 			"bokchoy_task_user_payload", spew.Sdump(task.Payload))
 	}
 
