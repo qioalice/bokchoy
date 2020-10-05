@@ -41,7 +41,7 @@ func (b *Bokchoy) queueNames() []string {
 	return names
 }
 
-func (b *Bokchoy) displayOutput(queueNames []string) {
+func (b *Bokchoy) displayOutput() {
 
 	buf := newColorWriter(colorBrightGreen)
 	buf.Write("%s\n", _LOGO)
@@ -70,11 +70,16 @@ func (b *Bokchoy) displayOutput(queueNames []string) {
 	buf.Write("	- Countdown:       %s\n", b.defaultOptions.Countdown)
 	buf.Write("	- Timeout:         %s\n", b.defaultOptions.Timeout)
 
-	buf.Write("\n	[queues]\n")
-
-	for i := range queueNames {
-		buf.Write(fmt.Sprintf("	- %s\n", queueNames[i]))
+	queueNames := b.queueNames()
+	if len(queueNames) > 0 {
+		buf.Write("\n	[queues]\n")
+		for i := range queueNames {
+			buf.Write(fmt.Sprintf("	- %s\n", queueNames[i]))
+		}
 	}
+
+	_ = buf.WriteByte('\n')
+	_ = buf.WriteByte('\n')
 
 	_, _ = ekasys.Stdout().Write(buf.Bytes())
 }
