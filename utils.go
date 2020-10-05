@@ -32,39 +32,18 @@ func ID() string {
 	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
 }
 
-func TaskKey(queueName, taskID string) string {
-	return __buildRedisKeyTriple(queueName, taskID, "")
-}
-
-func __buildRedisKeyTriple(part1, part2, part3 string) string {
+func BuildKey(parts ...string) string {
 
 	var b strings.Builder
 
-	totalLen := 8 // len of "bokchoy/"
-	totalLen += len(part1)
-	if part2 != "" {
-		totalLen += len(part2) +1
-	}
-	if part3 != "" {
-		totalLen += len(part3) +1
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
 	}
 
-	b.Grow(totalLen)
-
-	if part1 != "" {
-		_, _ = b.WriteString(part1)
-	}
-	if part2 != "" {
-		if b.Len() > 0 {
-			_ = b.WriteByte('/')
-		}
-		_, _ = b.WriteString(part2)
-	}
-	if part3 != "" {
-		if b.Len() > 0 {
-			_ = b.WriteByte('/')
-		}
-		_, _ = b.WriteString(part3)
+	_, _ = b.WriteString(parts[0])
+	for i, n := 1, len(parts); i < n && parts[i] != ""; i++ {
+		_ = b.WriteByte('/')
+		_, _ = b.WriteString(parts[i])
 	}
 
 	return b.String()

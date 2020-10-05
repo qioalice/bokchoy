@@ -266,7 +266,7 @@ func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 			Throw()
 	}
 
-	taskKey := TaskKey(q.name, taskID)
+	taskKey := BuildKey(q.name, taskID)
 
 	encodedTask, err := q.parent.broker.Get(taskKey)
 	if err.IsNotNil() {
