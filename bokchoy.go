@@ -33,10 +33,12 @@ type (
 	Bokchoy struct {
 		sema           *sync.Mutex
 		wg             *sync.WaitGroup
-		defaultOptions *Options
+		defaultOptions *options
 		broker         Broker
 		queues         map[string]*Queue
-		middlewares    []MiddlewareFunc
+
+		handlers    []HandlerFunc
+
 		serializer     Serializer
 		logger         *ekalog.Logger
 		isStarted      bool
@@ -147,7 +149,7 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 	}
 
 	if !optionsObject.DisableOutput {
-		bok.displayOutput(bok.queueNames())
+		bok.displayOutput()
 	}
 
 	return bok, nil
@@ -175,19 +177,21 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 		return nil
 	}
 
-	optionsObject := *b.defaultOptions
-	for i, n := 0, len(options); i < n; i++ {
-		if options[i] != nil {
-			options[i](&optionsObject)
-		}
+	optionsObject := b.defaultOptions
+	if len(options) > 0 {
+		bokchoyDefaultOptionsCopy := *b.defaultOptions
+		optionsObject = &bokchoyDefaultOptionsCopy
+		optionsObject.apply(options)
 	}
 
 	queue, ok := b.queues[name]
 	if !ok {
 		queue = &Queue{
-			name:        name,
-			wg:          b.wg,
-			middlewares: b.middlewares,
+			parent:   b,
+			options:  optionsObject,
+			name:     name,
+			wg:       b.wg,
+			handlers: b.handlers,
 		}
 
 		b.queues[name] = queue
@@ -284,26 +288,8 @@ func (b *Bokchoy) Stop() {
 
 // Use append a new middleware to the system.
 // Does nothing if Bokchoy already running (Run() has called).
-func (b *Bokchoy) Use(middlewares ...MiddlewareFunc) *Bokchoy {
-
-	if !b.isValid() {
-		return nil
-	}
-
-	b.sema.Lock()
-	defer b.sema.Unlock()
-
-	if b.isStarted {
-		return b
-	}
-
-	for i, n := 0, len(middlewares); i < n; i++ {
-		if middlewares[i] != nil {
-			b.middlewares = append(b.middlewares, middlewares[i])
-		}
-	}
-
-	return b
+func (b *Bokchoy) Use(queueName string, handlers ...HandlerFunc) *Bokchoy {
+	return b.Queue(queueName).Use(handlers...).parent
 }
 
 // Empty empties initialized queues.
@@ -378,7 +364,3 @@ func (b *Bokchoy) Publish(
 	return b.Queue(queueName).Publish(payload, options...)
 }
 
-// Handle registers a new handler to consume tasks for a queue.
-func (b *Bokchoy) Handle(queueName string, callback HandlerFunc, options ...Option) {
-	b.Queue(queueName).handleFunc(callback, options)
-}
