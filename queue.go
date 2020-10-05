@@ -19,7 +19,6 @@
 package bokchoy
 
 import (
-	"math/rand"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -212,7 +211,7 @@ func (q *Queue) Cancel(taskID string) (*Task, *ekaerr.Error) {
 
 	task.MarkAsCanceled()
 
-	if err = q.Save(task); err != nil {
+	if err = q.save(task); err != nil {
 		return nil, err.
 			AddMessage(s).
 			Throw()
@@ -357,59 +356,6 @@ func (q *Queue) Consume() ([]Task, *ekaerr.Error) {
 	}
 
 	return tasks, nil
-}
-
-// Consumer returns a random consumer.
-func (q *Queue) Consumer() *consumer {
-	if q.isValid() && len(q.consumers) > 0 {
-		n := rand.Int() % len(q.consumers) // don't panic, it's seeded, see init.go
-		return &q.consumers[n]
-	}
-	return nil
-}
-
-// Save saves a task to the queue.
-func (q *Queue) Save(task *Task) *ekaerr.Error {
-	const s = "Bokchoy: Failed to save task. "
-
-	if !q.isValid() {
-		return ekaerr.IllegalArgument.
-			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
-			Throw()
-	}
-
-	encodedTask, err := task.Serialize(q.parent.serializer)
-	if err.IsNotNil() {
-		return err.
-			AddMessage(s).
-			AddFields("bokchoy_queue_name", q.name).
-			Throw()
-	}
-
-	if task.IsFinished() {
-		err = q.parent.broker.Set(task.Key(), encodedTask, task.TTL)
-	} else {
-		err = q.parent.broker.Set(task.Key(), encodedTask, 0)
-	}
-
-	//goland:noinspection GoNilness
-	if err.IsNotNil() {
-		return err.
-			AddMessage(s).
-			AddFields(
-				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", task.ID).
-			Throw()
-	}
-
-	if q.parent.logger.IsValid() {
-		q.parent.logger.Debug("Bokchoy: Task has been saved",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.ID)
-	}
-
-	return nil
 }
 
 // NewTask returns a new Task instance from payload and options.

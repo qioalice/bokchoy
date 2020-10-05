@@ -239,6 +239,50 @@ func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
 	return tasks, nil
 }
 
+// save saves a task to the queue.
+func (q *Queue) save(task *Task) *ekaerr.Error {
+	const s = "Bokchoy: Failed to save task. "
+
+	if !q.isValid() {
+		return ekaerr.IllegalArgument.
+			New(s + "Queue is invalid. Has it been initialized correctly?").
+			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			Throw()
+	}
+
+	encodedTask, err := task.Serialize(q.parent.serializer)
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields("bokchoy_queue_name", q.name).
+			Throw()
+	}
+
+	if task.IsFinished() {
+		err = q.parent.broker.Set(task.Key(), encodedTask, task.TTL)
+	} else {
+		err = q.parent.broker.Set(task.Key(), encodedTask, 0)
+	}
+
+	//goland:noinspection GoNilness
+	if err.IsNotNil() {
+		return err.
+			AddMessage(s).
+			AddFields(
+				"bokchoy_queue_name", q.name,
+				"bokchoy_task_id", task.ID).
+			Throw()
+	}
+
+	if q.parent.logger.IsValid() {
+		q.parent.logger.Debug("Bokchoy: Task has been saved",
+			"bokchoy_queue_name", q.name,
+			"bokchoy_task_id", task.ID)
+	}
+
+	return nil
+}
+
 // newTask (unlike NewTask) allows DO NOT make unnecessary COPY of Option's slice.
 // It's kinda micro optimisation.
 //
