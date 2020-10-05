@@ -49,7 +49,7 @@ type (
 
 		parent         *Bokchoy
 
-		options        *Options
+		options        *options
 
 		name           string  // set by Bokchoy.Queue(), immutable
 		consumers      []consumer

@@ -1,13 +1,29 @@
+//
+// ORIGINAL PACKAGE
+// ( https://github.com/thoas/bokchoy )
+//
+//     Copyright © 2019. All rights reserved.
+//     Author: Florent Messa
+//     Contacts: florent.messa@gmail.com, https://github.com/thoas
+//     License: https://opensource.org/licenses/MIT
+//
+// HAS BEEN FORKED, HIGHLY MODIFIED AND NOW IS AVAILABLE AS
+// ( https://github.com/qioalice/bokchoy )
+//
+//     Copyright © 2020. All rights reserved.
+//     Author: Ilya Stroy.
+//     Contacts: qioalice@gmail.com, https://github.com/qioalice
+//     License: https://opensource.org/licenses/MIT
+//
+
 package bokchoy
 
 import (
-	"fmt"
 	"math/rand"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
 )
 
 func ID() string {
@@ -16,118 +32,40 @@ func ID() string {
 	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
 }
 
-func reverseDurations(durations []time.Duration) []time.Duration {
-	results := make([]time.Duration, len(durations))
-
-	j := len(durations) - 1
-	for i := 0; i < len(durations); i++ {
-		results[i] = durations[j]
-		j--
-	}
-
-	return results
+func TaskKey(queueName, taskID string) string {
+	return __buildRedisKeyTriple(queueName, taskID, "")
 }
 
-func mapDuration(values map[string]interface{}, key string, optional bool) (time.Duration, error) {
-	raw, err := mapString(values, key, optional)
-	if err != nil {
-		return 0, err
+func __buildRedisKeyTriple(part1, part2, part3 string) string {
+
+	var b strings.Builder
+
+	totalLen := 8 // len of "bokchoy/"
+	totalLen += len(part1)
+	if part2 != "" {
+		totalLen += len(part2) +1
+	}
+	if part3 != "" {
+		totalLen += len(part3) +1
 	}
 
-	if raw != "" {
-		value, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return 0, errors.Wrapf(ErrAttributeError, "cannot parse `%s` to integer", key)
+	b.Grow(totalLen)
+
+	if part1 != "" {
+		_, _ = b.WriteString(part1)
+	}
+	if part2 != "" {
+		if b.Len() > 0 {
+			_ = b.WriteByte('/')
 		}
-
-		timeValue := time.Duration(value) * time.Second
-
-		return timeValue, nil
+		_, _ = b.WriteString(part2)
 	}
-
-	return 0, nil
-}
-
-func mapTime(values map[string]interface{}, key string, optional bool) (time.Time, error) {
-	raw, err := mapString(values, key, optional)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	if raw != "" {
-		value, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return time.Time{}, errors.Wrapf(ErrAttributeError, "cannot parse `%s` to integer", key)
+	if part3 != "" {
+		if b.Len() > 0 {
+			_ = b.WriteByte('/')
 		}
-
-		timeValue := time.Unix(value, 0).UTC()
-
-		return timeValue, nil
+		_, _ = b.WriteString(part3)
 	}
 
-	return time.Time{}, nil
-}
-
-func mapString(values map[string]interface{}, key string, optional bool) (string, error) {
-	raw, ok := values[key]
-	if !ok && !optional {
-		return "", errors.Wrapf(ErrAttributeError, "cannot cast `%s`", key)
-	}
-
-	switch raw := raw.(type) {
-	case string:
-		return raw, nil
-	case int, int64:
-		return fmt.Sprintf("%d", raw), nil
-	}
-
-	return "", nil
-}
-
-func mapInt(values map[string]interface{}, key string, optional bool) (int, error) {
-	raw, err := mapString(values, key, optional)
-	if err != nil {
-		return 0, err
-	}
-
-	if raw != "" {
-		value, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return 0, errors.Wrapf(ErrAttributeError, "cannot parse `%s` to integer", key)
-		}
-
-		return int(value), nil
-	}
-
-	return 0, nil
-}
-
-func mapFloat(values map[string]interface{}, key string, optional bool) (float64, error) {
-	raw, err := mapString(values, key, optional)
-	if err != nil {
-		return 0, err
-	}
-
-	if raw != "" {
-		value, err := strconv.ParseFloat(raw, 10)
-		if err != nil {
-			return 0, errors.Wrapf(ErrAttributeError, "cannot parse `%s` to float", key)
-		}
-
-		return value, nil
-	}
-
-	return 0, nil
-}
-
-func unpack(fields map[string]interface{}) []interface{} {
-	args := make([]interface{}, len(fields)*2)
-	i := 0
-	for k, v := range fields {
-		args[i] = k
-		args[i+1] = v
-		i += 2
-	}
-
-	return args
+	return b.String()
 }

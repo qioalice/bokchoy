@@ -111,7 +111,7 @@ func (c *consumer) handleTask(task *Task) *ekaerr.Error {
 	if c.queue.parent.logger.IsValid() {
 		c.queue.parent.logger.Debug("Bokchoy: Task processing is started.",
 			"bokchoy_queue_name", c.queue.name,
-			"bokchoy_task_id", task.ID)
+			"bokchoy_task_id", task.id)
 	}
 
 	if task.Timeout != 0 {
@@ -197,11 +197,8 @@ func (c *consumer) handleError(err *ekaerr.Error) {
 					_CONSUMER_MAX_ERRORS_IN_A_ROW - queueConsumeErrorCounter)
 			}
 		}
-
-		if c.queue.parent.logger.IsValid() {
-			err.LogAsErrorUsing(c.queue.parent.logger, s)
-		}
 	} else {
+
 		prevStatus := atomic.SwapInt32(&c.queue.errCounter, 0)
 		unfreeze := prevStatus == _CONSUMER_STATUS_FREEZED && c.idx == 0
 

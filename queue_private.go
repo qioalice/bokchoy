@@ -71,58 +71,13 @@ func (q *Queue) onFunc(taskStatus TaskStatus, f HandlerFunc) *Queue {
 	return q
 }
 
-func (q *Queue) handleFunc(f HandlerFunc, options []Option) *Queue {
-	const s = "Bokchoy: Failed to register handler for consuming queue. "
-
-	if !q.isValid() {
-		return nil
-	}
-
-	q.parent.sema.Lock()
-	defer q.parent.sema.Unlock()
-
-	switch {
-	case len(q.consumers) > 0 && q.parent.logger.IsValid():
-		q.parent.logger.Warn(s + "A queue already has a registered handler.",
-			"bokchoy_queue_name", q.name)
-		fallthrough
-
-	case len(q.consumers) > 0:
-		return q
-
-	case q.parent.isStarted && q.parent.logger.IsValid():
-		q.parent.logger.Warn(s + "Consumers already running.",
-			"bokchoy_queue_name", q.name)
-		fallthrough
-
-	case q.parent.isStarted:
-		return q
-	}
-
-	optionsObject := q.parent.defaultOptions
-	if len(options) > 0 {
-		queueOptionsCopy := *q.parent.defaultOptions
-		optionsObject = &queueOptionsCopy
-		optionsObject.apply(options)
-	}
-
-	for i := int8(0); i < optionsObject.Concurrency; i++ {
-		q.consumers = append(q.consumers, consumer{
-			idx: i,
-			queue: q,
-		})
-	}
-
-	return q
-}
-
 // start starts consumers.
 func (q *Queue) start() {
 
 	// Do not lock/unlock q.parent.sema.
 	// Already protected by callers.
 
-	if len(q.consumers) == 0 {
+	if q.options.Concurrency == 0 {
 		if q.parent.logger.IsValid() {
 			q.parent.logger.Warn("Bokchoy: Queue starting is requested " +
 				"but does not have consumers. " +
