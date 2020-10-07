@@ -61,7 +61,7 @@ func (_ *serializerJSON) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 	return data, nil
 }
 
-func (_ *serializerJSON) Loads(data []byte, v interface{}) *ekaerr.Error {
+func (_ *serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 	legacyErr := jsoniter.Unmarshal(data, v)
 	if legacyErr != nil {
 

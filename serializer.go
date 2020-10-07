@@ -25,7 +25,7 @@ import (
 // Serializer defines an interface to implement a serializer.
 type Serializer interface {
 	Dumps(interface{}) ([]byte, *ekaerr.Error)
-	Loads([]byte, interface{}) *ekaerr.Error
+	Loads([]byte, *interface{}) *ekaerr.Error
 	IsHumanReadable() bool
 	Name() string
 }

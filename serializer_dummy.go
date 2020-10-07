@@ -38,7 +38,7 @@ func (_ *serializerDummy) Dumps(_ interface{}) ([]byte, *ekaerr.Error) {
 	return nil, nil
 }
 
-func (_ *serializerDummy) Loads(_ []byte, _ interface{}) *ekaerr.Error {
+func (_ *serializerDummy) Loads(_ []byte, _ *interface{}) *ekaerr.Error {
 	return nil
 }
 
