@@ -61,6 +61,7 @@ func (b *Bokchoy) displayOutput() {
 	srhr := b.serializer.IsHumanReadable()
 
 	buf.Write("	[config]\n")
+	buf.Write("	- Version:         %s\n", VERSION)
 	buf.Write("	- Broker:          %s\n", b.broker.String())
 	buf.Write("	- Serializer:      %s (Human-readable: %t)\n", srn, srhr)
 	buf.Write("	- Concurrency:     %d\n", b.defaultOptions.Concurrency)
