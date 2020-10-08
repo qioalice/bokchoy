@@ -129,7 +129,7 @@ func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
 	tasks := make([]Task, len(encodedTasks))
 	for i, n := 0, len(encodedTasks); i < n; i++ {
 
-		err := tasks[i].Deserialize(encodedTasks[i], q.parent.serializer)
+		err := tasks[i].Deserialize(encodedTasks[i], q.options.Serializer)
 		if err.IsNotNil() {
 			return nil, err.
 				AddMessage(s).
@@ -155,7 +155,7 @@ func (q *Queue) save(task *Task) *ekaerr.Error {
 			Throw()
 	}
 
-	encodedTask, err := task.Serialize(q.parent.serializer)
+	encodedTask, err := task.Serialize(q.options.Serializer)
 	if err.IsNotNil() {
 		return err.
 			AddMessage(s).

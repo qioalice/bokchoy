@@ -283,7 +283,7 @@ func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 	}
 
 	task := new(Task)
-	err = task.Deserialize(encodedTask, q.parent.serializer)
+	err = task.Deserialize(encodedTask, q.options.Serializer)
 	if err.IsNotNil() {
 		return nil, err.
 			AddMessage(s).
@@ -406,7 +406,7 @@ func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
 	// No need to check task,
 	// because task.Serialize already has all checks.
 
-	serializedTask, err := task.Serialize(q.parent.serializer)
+	serializedTask, err := task.Serialize(q.options.Serializer)
 	if err.IsNotNil() {
 		return err.
 			AddMessage(s).

@@ -57,8 +57,8 @@ func (b *Bokchoy) displayOutput() {
 		}
 	}
 
-	srn := b.serializer.Name()
-	srhr := b.serializer.IsHumanReadable()
+	srn := b.defaultOptions.Serializer.Name()
+	srhr := b.defaultOptions.Serializer.IsHumanReadable()
 
 	buf.Write("	[config]\n")
 	buf.Write("	- Version:         %s\n", VERSION)

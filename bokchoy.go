@@ -39,7 +39,6 @@ type (
 
 		handlers    []HandlerFunc
 
-		serializer     Serializer
 		logger         *ekalog.Logger
 		isStarted      bool
 
@@ -134,7 +133,6 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 
 	bok := &Bokchoy{
 		broker:         optionsObject.Broker,
-		serializer:     optionsObject.Serializer,
 		queues:         make(map[string]*Queue),
 		wg:             &sync.WaitGroup{},
 		sema:           &sync.Mutex{},
