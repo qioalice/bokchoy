@@ -87,6 +87,19 @@ func (q *Queue) start() {
 		return
 	}
 
+	handlersCount := len(q.handlers) +
+		len(q.onStart) + len(q.onSuccess) + len(q.onFailure) + len(q.onComplete)
+	if handlersCount == 0 {
+		if q.parent.logger.IsValid() {
+			q.parent.logger.Warn("Bokchoy: Queue starting is requested " +
+				"but does not have registered handlers or task status changed callbacks. " +
+				"Did you ever call Use() or any of " +
+				"OnStart(), OnComplete(), OnFailure(), OnSuccess() setters?",
+				"bokchoy_queue_name", q.name)
+		}
+		return
+	}
+
 	q.consumers = make([]consumer, q.options.Concurrency)
 	for i, n := 0, len(q.consumers); i < n; i++ {
 		q.consumers[i].queue = q
