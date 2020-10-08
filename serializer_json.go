@@ -105,18 +105,6 @@ func (q *serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 				Throw()
 		}
 
-		t := reflect2.TypeOf(*v)
-		if t.RType() != q.typ.RType() {
-			return ekaerr.IllegalArgument.
-				New(s + "Unexpected data type. Must be the same.").
-				AddFields(
-					"bokchoy_serializer_want_rtype", q.typ.RType(),
-					"bokchoy_serializer_want_type", q.typ.String(),
-					"bokchoy_serializer_got_rtype", t.RType(),
-					"bokchoy_serializer_got_type", t.String()).
-				Throw()
-		}
-
 		injectDest = q.typ.New()
 		legacyErr = jsoniter.Unmarshal(data, injectDest)
 
@@ -147,7 +135,7 @@ func (q *serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 	}
 
 	if q.typIsPresented {
-		*v = injectDest
+		*v = q.typ.Indirect(injectDest)
 	}
 
 	return nil
