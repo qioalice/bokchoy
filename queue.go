@@ -73,28 +73,28 @@ func (q *Queue) Name() string {
 }
 
 // Use appends a new handler middleware to the queue.
-func (q *Queue) Use(handler ...HandlerFunc) *Queue {
+func (q *Queue) Use(callback ...HandlerFunc) *Queue {
 	const s = "Bokchoy: Failed to register middleware for consuming queue. "
 
 	if !q.isValid() {
 		return nil
 	}
 
-	if len(handler) > 0 {
-		// Filter middlewares. Remain only not-nil.
-		handlersBeingRegistered := make([]HandlerFunc, 0, len(handler))
-		for _, handlerBeingRegistered := range handlersBeingRegistered {
+	if len(callback) > 0 {
+		// Filter handlers. Remain only not-nil.
+		handlersBeingRegistered := make([]HandlerFunc, 0, len(callback))
+		for _, handlerBeingRegistered := range callback {
 			if handlerBeingRegistered != nil {
 				handlersBeingRegistered =
 					append(handlersBeingRegistered, handlerBeingRegistered)
 			}
 		}
-		handler = handlersBeingRegistered
+		callback = handlersBeingRegistered
 	}
 
-	// Now middlewares contains only not nil middlewares.
+	// Now 'callback' contains only not nil handlers.
 
-	if len(handler) == 0 {
+	if len(callback) == 0 {
 		return q
 	}
 
@@ -127,7 +127,7 @@ func (q *Queue) Use(handler ...HandlerFunc) *Queue {
 		q.handlers = append(q.parent.handlers[:0:0], q.parent.handlers...)
 	}
 
-	q.handlers = append(q.handlers, handler...)
+	q.handlers = append(q.handlers, callback...)
 	return q
 }
 
