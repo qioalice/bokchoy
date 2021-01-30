@@ -23,9 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekadanger"
 	"github.com/qioalice/ekago/v2/ekaerr"
 	"github.com/qioalice/ekago/v2/ekatime"
+	"github.com/qioalice/ekago/v2/ekaunsafe"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -159,7 +159,7 @@ func (t *Task) Serialize(userPayloadSerializer Serializer) ([]byte, *ekaerr.Erro
 	needToEncodePayload := true
 
 	// Maybe payload has not been changed?
-	payloadDataAddr := ekadanger.TakeRealAddr(t.Payload)
+	payloadDataAddr := ekaunsafe.TakeRealAddr(t.Payload)
 	if uintptr(payloadDataAddr) == t.payloadOldAddr && len(t.payloadEncoded) > 0 {
 		needToEncodePayload = false
 	}
@@ -230,6 +230,6 @@ func (t *Task) Deserialize(data []byte, userPayloadSerializer Serializer) *ekaer
 			Throw()
 	}
 
-	t.payloadOldAddr = uintptr(ekadanger.TakeRealAddr(t.Payload))
+	t.payloadOldAddr = uintptr(ekaunsafe.TakeRealAddr(t.Payload))
 	return nil
 }

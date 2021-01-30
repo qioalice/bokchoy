@@ -21,12 +21,12 @@ package bokchoy
 import (
 	"encoding/hex"
 
-	"github.com/qioalice/ekago/v2/ekadanger"
 	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v2/ekaunsafe"
 
 	"github.com/davecgh/go-spew/spew" // deep dumper
-	"github.com/json-iterator/go" // fast than encoding/json
-	"github.com/modern-go/reflect2" // fast than reflect (w/ caching)
+	"github.com/json-iterator/go"     // fast than encoding/json
+	"github.com/modern-go/reflect2"   // fast than reflect (w/ caching)
 )
 
 type (
@@ -119,7 +119,7 @@ func (q *serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 	}
 
 	if legacyErr != nil {
-		vAddr := ekadanger.TakeRealAddr(*v)
+		vAddr := ekaunsafe.TakeRealAddr(*v)
 		vType := "<nil>"
 		if *v != nil {
 			vType = reflect2.TypeOf(v).String()

@@ -22,9 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/qioalice/ekago/v2/ekadanger"
 	"github.com/qioalice/ekago/v2/ekaerr"
 	"github.com/qioalice/ekago/v2/ekalog"
+	"github.com/qioalice/ekago/v2/ekaunsafe"
 )
 
 type (
@@ -89,12 +89,12 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 		logger = optionsObject.Logger
 	}
 
-	if ekadanger.TakeRealAddr(optionsObject.Broker) == nil && logger.IsValid() {
+	if ekaunsafe.TakeRealAddr(optionsObject.Broker) == nil && logger.IsValid() {
 		logger.Warn("Bokchoy.Initialization: " +
 			"You present a Broker with nil underlying address value. It's ok?")
 	}
 
-	if ekadanger.TakeRealAddr(optionsObject.Serializer) == nil && logger.IsValid() {
+	if ekaunsafe.TakeRealAddr(optionsObject.Serializer) == nil && logger.IsValid() {
 		logger.Warn("Bokchoy.Initialization: " +
 			"You present a Serializer with nil underlying address value. It's ok?")
 	}
