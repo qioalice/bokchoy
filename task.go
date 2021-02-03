@@ -33,24 +33,32 @@ import (
 type (
 	// Task is the model stored in a Queue.
 	Task struct {
-		id             string
-		queueName      string
-		PublishedAt    ekatime.Timestamp
-		startedAt      int64 // unix nano
-		processedAt    int64 // unix nano
-		status         TaskStatus
-		oldStatus      TaskStatus
-		MaxRetries     int8
 		Error          *ekaerr.Error
 		Panic          interface{}
+
+		PublishedAt    ekatime.Timestamp
+
+		TTL            time.Duration
+		ETA            ekatime.Timestamp
+
+		RetryIntervals []time.Duration
+		MaxRetries     int8
+
+		ExecTime       time.Duration
+		Timeout        time.Duration
+
 		Payload        interface{}
+
+		id             string
+		queueName      string
+
+		startedAt      int64 // unix nano
+		processedAt    int64 // unix nano
+
+		status         TaskStatus // MUST KEEP BE PRIVATE!
+
 		payloadEncoded []byte
 		payloadOldAddr uintptr
-		ExecTime       time.Duration
-		TTL            time.Duration
-		Timeout        time.Duration
-		ETA            ekatime.Timestamp
-		RetryIntervals []time.Duration
 	}
 )
 
@@ -126,17 +134,12 @@ func (t *Task) MarkAsCanceled() {
 	t.status = TASK_STATUS_CANCELLED
 }
 
-// Finished returns if a task is finished or not.
+// IsFinished reports whether current Task is considered finished,
+// and callbacks onCompleted may be called for that.
 func (t *Task) IsFinished() bool {
-
-	if !t.isValid() {
-		return false
-	}
-
-	return (t.oldStatus == TASK_STATUS_SUCCEEDED) ||
-		((t.oldStatus == TASK_STATUS_FAILED || t.status == TASK_STATUS_FAILED) &&
-			(t.MaxRetries == 0)) ||
-		(t.status == TASK_STATUS_SUCCEEDED)
+	return t.isValid() &&
+		(t.status == TASK_STATUS_SUCCEEDED ||
+			(t.status == TASK_STATUS_FAILED && t.MaxRetries == 0))
 }
 
 // Serialize serializes a Task to raw data.

@@ -37,8 +37,8 @@ const (
 func (ts TaskStatus) String() string {
 	switch ts {
 	case TASK_STATUS_INVALID:    return "Invalid"
-	case TASK_STATUS_WAITING:    return "Processing"
-	case TASK_STATUS_PROCESSING: return "Failed"
+	case TASK_STATUS_WAITING:    return "Waiting"
+	case TASK_STATUS_PROCESSING: return "Processing"
 	case TASK_STATUS_RETRYING:   return "Retrying"
 	case TASK_STATUS_SUCCEEDED:  return "Succeeded"
 	case TASK_STATUS_FAILED:     return "Failed"
