@@ -56,8 +56,12 @@ func (t *Task) markAsProcessing() {
 }
 
 func (t *Task) markAsRetrying() {
-	t.MaxRetries--
+
+	// FIRST: calculating next ETA, THEN: decreasing MaxRetries.
+	// NOT VICE VERSA! PANIC OTHERWISE, INDEX OUT OF RANGE IN (*Task).nextETA().
+
 	t.ETA = t.nextETA()
+	t.MaxRetries--
 	t.status = TASK_STATUS_RETRYING
 }
 

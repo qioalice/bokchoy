@@ -37,7 +37,7 @@ const (
 	_DEFAULT_MAX_RETRIES = 3
 	_DEFAULT_TTL         = 180 * time.Second
 
-	VERSION = "v1.0.7, 08 October 2020, 14:19 GMT+3"
+	VERSION = "v1.0.10, 03 February 2021, 19:43 GMT+3"
 )
 
 var defaultRetryIntervals = []time.Duration{
