@@ -190,7 +190,7 @@ func (c *consumer) processTask(t *Task) *ekaerr.Error {
 		t.ETA = t.nextETA()
 		t.MaxRetries--
 
-		if err := c.queue.save(t); err.IsNotNil() {
+		if err := c.queue.PublishTask(t); err.IsNotNil() {
 			return err.
 				AddMessage(s + "Failed to return failed task to the pool " +
 					"for being retried later.").
