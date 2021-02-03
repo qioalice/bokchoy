@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/qioalice/ekago/v2/ekaerr"
-	"github.com/qioalice/ekago/v2/ekatime"
 )
 
 // Broker is the common interface to define a Broker.
@@ -53,14 +52,14 @@ type Broker interface {
 	// Count returns number of items from a queue name.
 	Count(string) (BrokerStats, *ekaerr.Error)
 
-	// Save synchronizes the stored item.
+	// Set synchronizes the stored item.
 	Set(string, []byte, time.Duration) *ekaerr.Error
 
 	// Publish publishes raw data.
-	Publish(queueName, taskID string, taskPayload []byte, taskETA ekatime.Timestamp) *ekaerr.Error
+	Publish(queueName, taskID string, taskPayload []byte, taskEtaUnixNano int64) *ekaerr.Error
 
 	// Consume returns an array of raw data.
-	Consume(string, ekatime.Timestamp) ([][]byte, *ekaerr.Error)
+	Consume(queueName string, etaUnixNano int64) ([][]byte, *ekaerr.Error)
 
 	// String must present an info about Broker like:
 	// Name, DSN, settings, etc.

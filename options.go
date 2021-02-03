@@ -51,7 +51,7 @@ func WithQueues(queues ...string) Option {
 	}
 }
 
-// WithQueues allows to override queues to run.
+// WithQueuess allows to override queues to run.
 func WithQueuess(queues []string) Option {
 	return func(opts *options) {
 		opts.Queues = append(opts.Queues, queues...)

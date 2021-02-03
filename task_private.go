@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/qioalice/ekago/v2/ekaerr"
-	"github.com/qioalice/ekago/v2/ekatime"
 )
 
 //goland:noinspection GoSnakeCaseUsage
@@ -72,12 +71,12 @@ func (t *Task) tillETA() time.Duration {
 	if t.ETA == 0 {
 		return 0
 	}
-	return time.Duration(t.ETA - ekatime.Now()) * time.Second
+	return time.Duration(t.ETA - time.Now().UnixNano())
 }
 
 // nextETA returns the next Task's ETA according with MaxRetries attempts counter.
 // Returns 0 if that counter is greater than length of RetryIntervals.
-func (t *Task) nextETA() ekatime.Timestamp {
+func (t *Task) nextETA() int64 {
 
 	if l := int8(len(t.RetryIntervals)); l != 0 {
 		var retryInterval time.Duration
@@ -88,7 +87,7 @@ func (t *Task) nextETA() ekatime.Timestamp {
 			retryInterval = t.RetryIntervals[0]
 		}
 
-		return ekatime.Now() + ekatime.Timestamp(retryInterval.Seconds())
+		return time.Now().UnixNano() + retryInterval.Nanoseconds()
 	} else {
 		return 0
 	}

@@ -403,32 +403,40 @@ func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
 			Throw()
 	}
 
+	var (
+		serializedTask []byte
+		err            *ekaerr.Error
+	)
+
 	// No need to check task,
 	// because task.Serialize already has all checks.
 
-	serializedTask, err := task.Serialize(q.options.Serializer)
-	if err.IsNotNil() {
+	switch serializedTask, err =
+		task.Serialize(q.options.Serializer); {
+
+	case err.IsNotNil():
 		return err.
 			AddMessage(s).
 			AddFields("bokchoy_queue_name", q.name).
 			Throw()
 	}
 
-	err = q.parent.broker.Publish(q.name, task.id, serializedTask, task.ETA)
-	if err.IsNotNil() {
+	switch err =
+		q.parent.broker.Publish(q.name, task.id, serializedTask, task.ETA); {
+
+	case err.IsNotNil():
 		return err.
 			AddMessage(s).
 			AddFields(
-				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", task.id,
+				"bokchoy_queue_name",        q.name,
+				"bokchoy_task_id",           task.id,
 				"bokchoy_task_user_payload", spew.Sdump(task.Payload)).
 			Throw()
-	}
 
-	if q.parent.logger.IsValid() {
-		q.parent.logger.Debug("Bokchoy: Tash has been published",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.id,
+	case q.parent.logger.IsValid():
+		q.parent.logger.Debug("Bokchoy: Task has been published",
+			"bokchoy_queue_name",        q.name,
+			"bokchoy_task_id",           task.id,
 			"bokchoy_task_user_payload", spew.Sdump(task.Payload))
 	}
 

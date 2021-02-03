@@ -50,7 +50,7 @@ type (
 		PublishedAt    ekatime.Timestamp
 
 		TTL            time.Duration
-		ETA            ekatime.Timestamp
+		ETA            int64
 
 		RetryIntervals []time.Duration
 		MaxRetries     int8

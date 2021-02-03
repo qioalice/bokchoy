@@ -20,6 +20,7 @@ package bokchoy
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/qioalice/ekago/v2/ekaerr"
 	"github.com/qioalice/ekago/v2/ekatime"
@@ -236,7 +237,7 @@ func (q *Queue) newTask(payload interface{}, options []Option) *Task {
 	task.RetryIntervals = optionsObject.RetryIntervals
 
 	if optionsObject.Countdown > 0 {
-		task.ETA = ekatime.Now() + ekatime.Timestamp(optionsObject.Countdown.Seconds())
+		task.ETA = time.Now().UnixNano() + optionsObject.Countdown.Nanoseconds()
 	}
 
 	return task
