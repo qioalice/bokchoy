@@ -19,6 +19,7 @@
 package bokchoy
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -319,9 +320,9 @@ func (c *consumer) fireEvents(task *Task) {
 			}
 		}
 
-		if !c._firMayContinue(task) || oldStatus == task.status ||
-			task.status == TASK_STATUS_RETRYING {
-
+		if !c._firMayContinue(task) ||
+				oldStatus == task.status ||
+				task.status == TASK_STATUS_RETRYING {
 			break
 		}
 	}
@@ -341,13 +342,17 @@ func (c *consumer) fireEvents(task *Task) {
 }
 
 // Functions started with "_fir" is a part of fire() call.
-func (c *consumer) _firPanicProtector() {
-
+func (c *consumer) _firPanicProtector(task *Task) {
+	if panicked := recover(); panicked != nil {
+		task.Error = ekaerr.IllegalState.
+			New(fmt.Sprintf("Handler panicked: %+v", panicked)).
+			Throw()
+	}
 }
 
 // Functions started with "_fir" is a part of fire() call.
 func (c *consumer) _firSafeCall(handler HandlerFunc, task *Task) {
-	defer c._firPanicProtector()
+	defer c._firPanicProtector(task)
 	if err := handler(task); err.IsNotNil() {
 		task.Error = err
 	}
