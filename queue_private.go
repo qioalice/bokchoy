@@ -19,6 +19,8 @@
 package bokchoy
 
 import (
+	"sync/atomic"
+
 	"github.com/qioalice/ekago/v2/ekaerr"
 	"github.com/qioalice/ekago/v2/ekatime"
 )
@@ -128,6 +130,7 @@ func (q *Queue) stop() {
 		q.consumers[i].requestStop()
 	}
 	q.wg.Wait()
+	atomic.StoreInt32(&q.errCounter, 0)
 
 	if q.parent.logger.IsValid() {
 		q.parent.logger.Debug("Bokchoy: Queue consumers has been stopped.",
