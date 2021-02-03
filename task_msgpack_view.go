@@ -39,24 +39,32 @@ type (
 	// declarations types, like time.Duration, ekatime.Timestamp, etc.
 	// So, we have to do that small trick.
 	taskMsgpackView struct {
-		ID             string        `msg:"id"`
-		Name           string        `msg:"nn"`
-		PublishedAt    int64         `msg:"pl"` // real type: ekatime.Timestamp
-		StartedAt      int64         `msg:"st"`
-		ProcessedAt    int64         `msg:"pr"`
-		Status         int8          `msg:"s"`
-		OldStatus      int8          `msg:"s0"`
-		MaxRetries     int8          `msg:"re"`
 		error          *ekaerr.Error `           msg:"-"`
 		panic          interface{}   `           msg:"-"`
+
+		PublishedAt    int64         `msg:"pl"` // real type: ekatime.Timestamp
+
+		TTL            int64         `msg:"tl"` // real type: time.Duration
+		ETA            int64         `msg:"et"` // real type: ekatime.Timestamp
+
+		RetryIntervals []int64       `msg:"ri"` // real type: []time.Duration
+		MaxRetries     int8          `msg:"re"`
+
+		ExecTime       int64         `msg:"ex"`
+		Timeout        int64         `msg:"to"` // real type: time.Duration
+
 		payload        interface{}   `           msg:"-"`
+
+		ID             string        `msg:"id"`
+		Name           string        `msg:"nn"`
+
+		StartedAt      int64         `msg:"st"`
+		ProcessedAt    int64         `msg:"pr"`
+
+		Status         int8          `msg:"s"`
+
 		PayloadEncoded []byte        `msg:"p"`
 		payloadOldAddr uintptr       `           msg:"-"`
-		ExecTime       int64         `msg:"ex"`
-		TTL            int64         `msg:"tl"` // real type: time.Duration
-		Timeout        int64         `msg:"to"` // real type: time.Duration
-		ETA            int64         `msg:"et"` // real type: ekatime.Timestamp
-		RetryIntervals []int64       `msg:"ri"` // real type: []time.Duration
 	}
 )
 
