@@ -20,7 +20,6 @@ package bokchoy
 
 import (
 	"encoding/hex"
-	"strings"
 	"time"
 
 	"github.com/qioalice/ekago/v2/ekaerr"
@@ -61,7 +60,6 @@ type (
 		Payload        interface{}
 
 		id             string
-		queueName      string
 
 		startedAt      int64 // unix nano
 		processedAt    int64 // unix nano
@@ -73,47 +71,13 @@ type (
 	}
 )
 
+// ID returns an unique ID (ULID) of the current Task.
+// Read more: https://github.com/oklog/ulid .
 func (t *Task) ID() string {
-
 	if !t.isValid() {
 		return ""
 	}
-
 	return t.id
-}
-
-//
-func (t *Task) QueueName() string {
-
-	if !t.isValid() {
-		return ""
-	}
-
-	return t.queueName
-}
-
-
-// Key returns a Task's key that must be used
-// implementing read/write access to the Task in the Bokchoy backend.
-//
-// Generally, returns a string "t.QueueName/t.ID".
-//
-// Requirements:
-// - Task is valid. Otherwise empty string is returned.
-func (t *Task) Key() string {
-
-	if !t.isValid() {
-		return ""
-	}
-
-	var sb strings.Builder
-	sb.Grow(1 + len(t.queueName) + len(t.id))
-
-	_, _ = sb.WriteString(t.queueName)
-	_    = sb.WriteByte('/')
-	_, _ = sb.WriteString(t.id)
-
-	return sb.String()
 }
 
 // Status returns the Task's status, that:

@@ -85,12 +85,6 @@ func (z *taskMsgpackView) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "ID")
 				return
 			}
-		case "nn":
-			z.Name, err = dc.ReadString()
-			if err != nil {
-				err = msgp.WrapError(err, "Name")
-				return
-			}
 		case "st":
 			z.StartedAt, err = dc.ReadInt64()
 			if err != nil {
@@ -128,9 +122,9 @@ func (z *taskMsgpackView) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *taskMsgpackView) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 13
+	// map header, size 12
 	// write "pl"
-	err = en.Append(0x8d, 0xa2, 0x70, 0x6c)
+	err = en.Append(0x8c, 0xa2, 0x70, 0x6c)
 	if err != nil {
 		return
 	}
@@ -216,16 +210,6 @@ func (z *taskMsgpackView) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "ID")
 		return
 	}
-	// write "nn"
-	err = en.Append(0xa2, 0x6e, 0x6e)
-	if err != nil {
-		return
-	}
-	err = en.WriteString(z.Name)
-	if err != nil {
-		err = msgp.WrapError(err, "Name")
-		return
-	}
 	// write "st"
 	err = en.Append(0xa2, 0x73, 0x74)
 	if err != nil {
@@ -272,9 +256,9 @@ func (z *taskMsgpackView) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *taskMsgpackView) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 13
+	// map header, size 12
 	// string "pl"
-	o = append(o, 0x8d, 0xa2, 0x70, 0x6c)
+	o = append(o, 0x8c, 0xa2, 0x70, 0x6c)
 	o = msgp.AppendInt64(o, z.PublishedAt)
 	// string "tl"
 	o = append(o, 0xa2, 0x74, 0x6c)
@@ -300,9 +284,6 @@ func (z *taskMsgpackView) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "id"
 	o = append(o, 0xa2, 0x69, 0x64)
 	o = msgp.AppendString(o, z.ID)
-	// string "nn"
-	o = append(o, 0xa2, 0x6e, 0x6e)
-	o = msgp.AppendString(o, z.Name)
 	// string "st"
 	o = append(o, 0xa2, 0x73, 0x74)
 	o = msgp.AppendInt64(o, z.StartedAt)
@@ -397,12 +378,6 @@ func (z *taskMsgpackView) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "ID")
 				return
 			}
-		case "nn":
-			z.Name, bts, err = msgp.ReadStringBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "Name")
-				return
-			}
 		case "st":
 			z.StartedAt, bts, err = msgp.ReadInt64Bytes(bts)
 			if err != nil {
@@ -441,6 +416,6 @@ func (z *taskMsgpackView) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *taskMsgpackView) Msgsize() (s int) {
-	s = 1 + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.ArrayHeaderSize + (len(z.RetryIntervals) * (msgp.Int64Size)) + 3 + msgp.Int8Size + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.StringPrefixSize + len(z.ID) + 3 + msgp.StringPrefixSize + len(z.Name) + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 2 + msgp.Int8Size + 2 + msgp.BytesPrefixSize + len(z.PayloadEncoded)
+	s = 1 + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.ArrayHeaderSize + (len(z.RetryIntervals) * (msgp.Int64Size)) + 3 + msgp.Int8Size + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 3 + msgp.StringPrefixSize + len(z.ID) + 3 + msgp.Int64Size + 3 + msgp.Int64Size + 2 + msgp.Int8Size + 2 + msgp.BytesPrefixSize + len(z.PayloadEncoded)
 	return
 }

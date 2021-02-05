@@ -31,14 +31,14 @@ const (
 )
 
 func (t *Task) isValid() bool {
-	return t != nil && t.id != "" && t.queueName != ""
+	return t != nil && t.id != ""
 }
 
 func (t *Task) whyInvalid() string {
 	switch {
 	case t == nil:
 		return "Task receiver is nil"
-	case t.id == "" || t.queueName == "":
+	case t.id == "":
 		return "Task object has been instantiated manually instead of calling Queue.NewTask()"
 	default:
 		return "Internal error. Task.whyInvalid()"
@@ -63,15 +63,6 @@ func (t *Task) markAsRetrying() {
 func (t *Task) markAsTimedOut() {
 	t.processedAt = time.Now().UTC().UnixNano()
 	t.status = TASK_STATUS_TIMED_OUT
-}
-
-// tillETA returns a time interval between now and Task's ETA.
-// Returns 0 if ETA is not set.
-func (t *Task) tillETA() time.Duration {
-	if t.ETA == 0 {
-		return 0
-	}
-	return time.Duration(t.ETA - time.Now().UnixNano())
 }
 
 // nextETA returns the next Task's ETA according with MaxRetries attempts counter.
