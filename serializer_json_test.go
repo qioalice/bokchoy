@@ -24,17 +24,28 @@ import (
 	"github.com/qioalice/bokchoy"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/modern-go/reflect2"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSerializerJSON_Loads(t *testing.T) {
+func TestSerializerJSON(t *testing.T) {
+
 	type T struct { I int }
-	var dest interface{}
+	var (t1 T; t2, t3 interface{})
+
 	const JSON = `{"i":42}`
-	serializer := bokchoy.CustomSerializerJSON(reflect2.TypeOf(new(T)))
-	err := serializer.Loads([]byte(JSON), &dest)
-	err.LogAsFatal("Fatal to decode.")
-	require.True(t, err.IsNil())
-	spew.Dump(dest)
+
+	ser := bokchoy.CustomSerializerJSON(T{})
+
+	t1.I = 42
+	t1G, err := ser.Dumps(t1)
+	err.LogAsFatal()
+
+	ser.Loads([]byte(JSON), &t2).LogAsFatal()
+	ser.Loads(t1G, &t3).LogAsFatal()
+
+	require.Equal(t, t1, t2)
+	require.Equal(t, t1, t3)
+	require.Equal(t, t2, t3)
+
+	spew.Dump(t3)
 }

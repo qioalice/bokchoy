@@ -22,7 +22,11 @@ import (
 	"github.com/modern-go/reflect2"
 )
 
-var (
-	reflectedReflect2Type = reflect2.TypeOfPtr((*reflect2.Type)(nil)).Elem()
+type (
+	// serializerJSON is type that implements Serializer interface
+	// and provides JSON encoding/decoding with strict type checks,
+	// allowing to user be safe about conversion interface{} to custom type.
+	serializerJSON struct {
+		typ reflect2.Type
+	}
 )
-

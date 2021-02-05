@@ -22,7 +22,9 @@ import (
 	"github.com/qioalice/ekago/v2/ekaerr"
 )
 
-// Serializer defines an interface to implement a serializer.
+// Serializer defines an interface to implement a serializer,
+// to encode user's Task payload to be a part of encoded RAW data of tasks,
+// that will be used by Broker.
 type Serializer interface {
 	Dumps(interface{}) ([]byte, *ekaerr.Error)
 	Loads([]byte, *interface{}) *ekaerr.Error
