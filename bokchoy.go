@@ -63,16 +63,12 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 	switch {
 
 	case optionsObject.Broker == nil:
-		// Some kind of serializers may work OK even if its receiver is nil.
-		// It's bad design, but OK.
 		return nil, ekaerr.InitializationFailed.
 			New("Bokchoy: Broker must be presented. " +
 				"Use WithBroker() option as a part of constructor argument").
 			Throw()
 
 	case optionsObject.Serializer == nil:
-		// Some kind of serializers may work OK even if its receiver is nil.
-		// It's bad design, but OK.
 		return nil, ekaerr.InitializationFailed.
 			New("Bokchoy: Serializer must be presented. " +
 				"Use WithSerializer() option as a part of constructor argument").
@@ -118,12 +114,6 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 				"bokchoy_broker", optionsObject.Broker.String())
 		}
 
-		if err := optionsObject.Broker.Initialize(); err.IsNotNil() {
-			return nil, err.
-				AddMessage("Bokchoy: Failed to initialize presented Broker").
-				Throw()
-		}
-
 		if logger.IsValid() {
 			logger.Debug("Bokchoy.Initialization: " +
 				"Initialized successfully. Ready to use.",
@@ -153,7 +143,7 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 	return bok, nil
 }
 
-// Queue gets or creates a new queue.
+// Queue gets or creates a new.
 //
 // If Run() has been called already, the new queue's consumers will be start
 // immediately (if it's a new queue, and if Bokchan has not been stopped yet).
@@ -214,14 +204,6 @@ func (b *Bokchoy) Run() *ekaerr.Error {
 		b.sema.Unlock()
 		return ekaerr.RejectedOperation.
 			New("Bokchoy: Bokchoy already running").
-			Throw()
-	}
-
-	if err := b.broker.Ping(); err != nil {
-		b.sema.Unlock()
-		return err.
-			AddMessage("Bokchoy: Failed to run Bokchoy consumers").
-			AddFields("bokchoy_broker", b.broker.String()).
 			Throw()
 	}
 
