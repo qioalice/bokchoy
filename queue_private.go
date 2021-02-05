@@ -233,7 +233,7 @@ func (q *Queue) newTask(payload interface{}, options []Option) *Task {
 	}
 
 	task := &Task{
-		id:          ID(),
+		id:          q.taskIdGen.newId(),
 		Payload:     payload,
 		status:      TASK_STATUS_WAITING,
 		PublishedAt: ekatime.Now(),

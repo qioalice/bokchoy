@@ -52,6 +52,8 @@ type (
 		options        *options
 
 		name           string  // set by Bokchoy.Queue(), immutable
+		taskIdGen      taskIdGen
+
 		consumers      []consumer
 		wg             *sync.WaitGroup
 

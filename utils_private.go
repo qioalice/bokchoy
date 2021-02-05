@@ -19,32 +19,10 @@
 package bokchoy
 
 import (
-	"math/rand"
-	"strings"
-	"time"
-
-	"github.com/oklog/ulid"
+	"github.com/modern-go/reflect2"
 )
 
-func ID() string {
-	t := time.Now().UTC()
-	entropy := rand.New(rand.NewSource(t.UnixNano()))
-	return ulid.MustNew(ulid.Timestamp(t), entropy).String()
-}
+var (
+	reflectedReflect2Type = reflect2.TypeOfPtr((*reflect2.Type)(nil)).Elem()
+)
 
-func BuildKey(parts ...string) string {
-
-	var b strings.Builder
-
-	if len(parts) == 0 || parts[0] == "" {
-		return ""
-	}
-
-	_, _ = b.WriteString(parts[0])
-	for i, n := 1, len(parts); i < n && parts[i] != ""; i++ {
-		_ = b.WriteByte('/')
-		_, _ = b.WriteString(parts[i])
-	}
-
-	return b.String()
-}

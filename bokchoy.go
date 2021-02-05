@@ -172,9 +172,9 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 		optionsObject.apply(options)
 	}
 
-	queue, ok := b.queues[name]
+	q, ok := b.queues[name]
 	if !ok {
-		queue = &Queue{
+		q = &Queue{
 			parent:   b,
 			options:  optionsObject,
 			name:     name,
@@ -182,10 +182,11 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 			handlers: b.handlers,
 		}
 
-		b.queues[name] = queue
+		q.taskIdGen.init()
+		b.queues[name] = q
 	}
 
-	return queue
+	return q
 }
 
 // Run runs the system and block the current goroutine.
