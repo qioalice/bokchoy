@@ -96,8 +96,9 @@ func (c *consumer) requestStop() {
 	atomic.StoreInt32(&c.status, _CONSUMER_STATUS_STOPPED)
 }
 
-// consumeLoop() is consumer's loop. It just calls consumeLoopIter(),
-// checking whether loop can go to the next iteration after each one.
+// consumeLoop() is consumer's loop.
+// It tries to retrieve next N tasks (depends of Broker.Consume())
+// and process all of them one-by-one using processTask() method.
 func (c *consumer) consumeLoop() {
 	defer c.queue.wg.Done()
 
@@ -105,35 +106,27 @@ func (c *consumer) consumeLoop() {
 	for status == _CONSUMER_STATUS_ACTIVE ||
 		status == _CONSUMER_STATUS_FROZEN && c.idx == 0 {
 
-		c.consumeLoopIter()
-		status = atomic.LoadInt32(&c.status)
-	}
-}
-
-// consumerLoopIter is consumer's loop iteration.
-//
-// It tries to retrieve next N tasks (depends of Broker.Consume())
-// and process all of them one-by-one using processTask() method.
-func (c *consumer) consumeLoopIter() {
-
-	tasks, err := c.queue.Consume()
-	c.countErrorIfAny(err)
-
-	if len(tasks) == 0 {
-		return
-	}
-
-	if c.queue.parent.logger.IsValid() {
-		c.queue.parent.logger.Debug("Bokchoy: Received tasks to consume.",
-			"bokchoy_queue_name", c.queue.name,
-			"bokchoy_tasks_received", len(tasks),
-			"bokchoy_queue_consumsers_idx", c.idx,
-			"bokchoy_queue_consumers_number", len(c.queue.consumers))
-	}
-
-	for i, n := 0, len(tasks); i < n; i++ {
-		err = c.processTask(&tasks[i])
+		tasks, err := c.queue.Consume()
 		c.countErrorIfAny(err)
+
+		switch {
+
+		case len(tasks) > 0 && c.queue.parent.logger.IsValid():
+			c.queue.parent.logger.Debug("Bokchoy: Received tasks to consume.",
+				"bokchoy_queue_name",             c.queue.name,
+				"bokchoy_tasks_received",         len(tasks),
+				"bokchoy_queue_consumsers_idx",   c.idx,
+				"bokchoy_queue_consumers_number", len(c.queue.consumers))
+			fallthrough
+
+		case len(tasks) > 0:
+			for i, n := 0, len(tasks); i < n; i++ {
+				err = c.processTask(&tasks[i])
+				c.countErrorIfAny(err)
+			}
+		}
+
+		status = atomic.LoadInt32(&c.status)
 	}
 }
 
@@ -194,6 +187,12 @@ func (c *consumer) processTask(t *Task) *ekaerr.Error {
 			return err.
 				AddMessage(s + "Failed to return failed task to the pool " +
 					"for being retried later.").
+				Throw()
+		}
+	} else {
+		if err := c.queue.save(t); err.IsNotNil() {
+			return err.
+				AddMessage(s + "Failed to save processed task.").
 				Throw()
 		}
 	}
@@ -380,6 +379,6 @@ func (c *consumer) fireEvents(task *Task) {
 		New("Too many status changes.").
 		AddFields("bokchoy_last_status", task.status.String()).
 		LogAsWarnUsing(c.queue.parent.logger, s,
-			"bokchoy_task_id", task.id,
+			"bokchoy_task_id",    task.id,
 			"bokchoy_queue_name", c.queue.name)
 }
