@@ -142,3 +142,9 @@ func WithTTL(ttl time.Duration) Option {
 		opts.TTL = ttl
 	}
 }
+
+// WithCustomSerializerJSON is an alias for
+// WithSerializer(CustomSerializerJSON(example)).
+func WithCustomSerializerJSON(example interface{}) Option {
+	return WithSerializer(CustomSerializerJSON(example))
+}
