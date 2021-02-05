@@ -30,7 +30,6 @@ func createPackageLevelClient() {
 	// since we don't initializing wg, defaultClient.isValid() will fail anyway
 	// before Init() would be called explicitly, but initialization allows us
 	// to use at least sema
-
 	defaultClient = new(Bokchoy)
 	defaultClient.sema = &sync.Mutex{}
 }

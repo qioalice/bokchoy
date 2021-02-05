@@ -247,7 +247,7 @@ func (q *Queue) List() ([]Task, *ekaerr.Error) {
 	return tasks, nil
 }
 
-// Get returns a task instance from the broker with its id.
+// Get returns a Task instance from the current Broker's Queue with its id.
 // Returns nil as Task if requested task is not found.
 func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 	const s = "Bokchoy: Failed to retrieve task from queue by its ID. "
@@ -266,40 +266,45 @@ func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 			Throw()
 	}
 
-	taskKey := BuildKey(q.name, taskID)
+	var (
+		encodedTask []byte
+		task        Task
+		err         *ekaerr.Error
+	)
 
-	encodedTask, err := q.parent.broker.Get(taskKey)
-	if err.IsNotNil() {
+	switch encodedTask, err =
+		q.parent.broker.Get(q.name, taskID); {
+
+	case err.IsNotNil():
 		return nil, err.
 			AddMessage(s).
 			AddFields(
 				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", taskID).
+				"bokchoy_task_id",    taskID).
 			Throw()
-	}
 
-	if encodedTask == nil {
+	case len(encodedTask) == 0:
 		return nil, nil
 	}
 
-	task := new(Task)
-	err = task.Deserialize(encodedTask, q.options.Serializer)
-	if err.IsNotNil() {
+	switch err =
+		task.Deserialize(encodedTask, q.options.Serializer); {
+
+	case err.IsNotNil():
 		return nil, err.
 			AddMessage(s).
 			AddFields(
 				"bokchoy_queue_name", q.name,
-				"bokchoy_task_key", taskKey)
-	}
+				"bokchoy_task_id",    taskID)
 
-	if q.parent.logger.IsValid() {
+	case q.parent.logger.IsValid():
 		q.parent.logger.Debug("Bokchoy: Task has been retrieved",
 			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.id,
-			"bokchoy_task_key", taskKey)
+			"bokchoy_task_id",    task.id)
+
 	}
 
-	return task, nil
+	return &task, nil
 }
 
 // Count returns statistics from queue:
@@ -338,16 +343,26 @@ func (q *Queue) Consume() ([]Task, *ekaerr.Error) {
 			Throw()
 	}
 
-	encodedTasks, err := q.parent.broker.Consume(q.name, 0)
-	if err.IsNotNil() {
+	var (
+		encodedTasks [][]byte
+		tasks        []Task
+		err          *ekaerr.Error
+	)
+
+	switch encodedTasks, err =
+		q.parent.broker.Consume(q.name, 0); {
+
+	case err.IsNotNil():
 		return nil, err.
 			AddMessage(s).
 			AddFields("bokchoy_queue_name", q.name).
 			Throw()
 	}
 
-	tasks, err := q.decodeTasks(encodedTasks)
-	if err.IsNotNil() {
+	switch tasks, err =
+		q.decodeTasks(encodedTasks); {
+
+	case err.IsNotNil():
 		return nil, err.
 			AddMessage(s).
 			Throw()

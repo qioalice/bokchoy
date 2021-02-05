@@ -26,21 +26,23 @@ import (
 	"github.com/qioalice/ekago/v2/ekasys"
 )
 
+// isValid reports whether current Bokchoy object is valid
+// and has been initialized properly, using its constructor, not just instantiating.
 func (b *Bokchoy) isValid() bool {
 	return b != nil && b.wg != nil && b.sema != nil
 }
 
 // queueNames returns the managed queue names.
+// Caller must take responsibility about locking to provide thread-safety.
 func (b *Bokchoy) queueNames() []string {
 	names := make([]string, 0, len(b.queues))
-
 	for k := range b.queues {
 		names = append(names, k)
 	}
-
 	return names
 }
 
+// displayOutput writes ASCII hello message to the synced STDOUT.
 func (b *Bokchoy) displayOutput() {
 
 	buf := newColorWriter(colorBrightGreen)

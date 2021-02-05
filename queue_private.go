@@ -161,8 +161,10 @@ func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
 	return tasks, nil
 }
 
-// save saves a task to the queue.
-func (q *Queue) save(task *Task) *ekaerr.Error {
+// save saves (creates or updates) a presented Task to the Queue's tasks list,
+// w/o publishing it, meaning that this task won't available to consume,
+// until it's not published explicitly.
+func (q *Queue) save(t *Task) *ekaerr.Error {
 	const s = "Bokchoy: Failed to save task. "
 
 	if !q.isValid() {
@@ -172,34 +174,41 @@ func (q *Queue) save(task *Task) *ekaerr.Error {
 			Throw()
 	}
 
-	encodedTask, err := task.Serialize(q.options.Serializer)
-	if err.IsNotNil() {
+	var (
+		encodedTask []byte
+		err         *ekaerr.Error
+	)
+
+	switch encodedTask, err =
+		t.Serialize(q.options.Serializer); {
+
+	case err.IsNotNil():
 		return err.
 			AddMessage(s).
 			AddFields("bokchoy_queue_name", q.name).
 			Throw()
 	}
 
-	if task.IsFinished() {
-		err = q.parent.broker.Set(task.Key(), encodedTask, task.TTL)
+	if t.IsFinished() {
+		err = q.parent.broker.Set(q.name, t.id, encodedTask, t.TTL)
 	} else {
-		err = q.parent.broker.Set(task.Key(), encodedTask, 0)
+		err = q.parent.broker.Set(q.name, t.id, encodedTask, 0)
 	}
 
-	//goland:noinspection GoNilness
-	if err.IsNotNil() {
+	switch {
+
+	case err.IsNotNil():
 		return err.
 			AddMessage(s).
 			AddFields(
 				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id", task.id).
+				"bokchoy_task_id",    t.id).
 			Throw()
-	}
 
-	if q.parent.logger.IsValid() {
+	case q.parent.logger.IsValid():
 		q.parent.logger.Debug("Bokchoy: Task has been saved",
 			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id", task.id)
+			"bokchoy_task_id",    t.id)
 	}
 
 	return nil
@@ -225,7 +234,6 @@ func (q *Queue) newTask(payload interface{}, options []Option) *Task {
 
 	task := &Task{
 		id:          ID(),
-		queueName:   q.name,
 		Payload:     payload,
 		status:      TASK_STATUS_WAITING,
 		PublishedAt: ekatime.Now(),
