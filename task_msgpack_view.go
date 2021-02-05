@@ -56,6 +56,7 @@ type (
 		payload        interface{}   `           msg:"-"`
 
 		ID             string        `msg:"id"`
+		queueName      string        `           msg:"-"`
 
 		StartedAt      int64         `msg:"st"`
 		ProcessedAt    int64         `msg:"pr"`

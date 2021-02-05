@@ -60,6 +60,7 @@ type (
 		Payload        interface{}
 
 		id             string
+		queueName      string
 
 		startedAt      int64 // unix nano
 		processedAt    int64 // unix nano
@@ -73,11 +74,28 @@ type (
 
 // ID returns an unique ID (ULID) of the current Task.
 // Read more: https://github.com/oklog/ulid .
+//
+// WARNING!
+// This value not guaranteed to be an unique over queues.
+// Although the chances of collision over queues are slim, keep that in mind.
+// If you need to distinguish two Task s from different queues,
+// use ID() along with QueueName().
+//
+// Nil safe.
+// Returns an empty string if Task is not initialized properly.
 func (t *Task) ID() string {
 	if !t.isValid() {
 		return ""
 	}
 	return t.id
+}
+
+// QueueName returns a queue name to which this task is published, or retrieved from.
+func (t *Task) QueueName() string {
+	if !t.isValid() {
+		return ""
+	}
+	return t.queueName
 }
 
 // Status returns the Task's status, that:

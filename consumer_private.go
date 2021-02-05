@@ -297,6 +297,10 @@ func (c *consumer) countErrorIfAny(err *ekaerr.Error) {
 // Closes passed channel if it's not nil when fire is done.
 func (c *consumer) fire(done chan<- struct{}, task *Task) {
 
+	// Task.queueName is not saved into encoded RAW data of task.
+	// So, Task.QueueName() must work, use consumer's queue name then.
+	task.queueName = c.queue.name
+
 	defer func(done chan<- struct{}) {
 		if done != nil {
 			close(done)
