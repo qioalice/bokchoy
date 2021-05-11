@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekalog"
+	"github.com/qioalice/ekago/v3/ekalog"
 )
 
 type (
@@ -37,7 +37,6 @@ type (
 		// --- Additional options ---
 
 		Logger            *ekalog.Logger
-		loggerIsPresented bool
 
 		Concurrency       int8
 		MaxRetries        int8
@@ -45,7 +44,6 @@ type (
 		Countdown         time.Duration
 		Timeout           time.Duration
 		RetryIntervals    []time.Duration
-		Initialize        bool
 		Queues            []string
 		DisableOutput     bool
 	}
@@ -71,7 +69,6 @@ func initDefaultOptions() {
 		WithTTL(_DEFAULT_TTL),
 		WithTimeout(_DEFAULT_TIMEOUT),
 		WithRetryIntervals(defaultRetryIntervals),
-		WithInitialize(true),
 	})
 }
 

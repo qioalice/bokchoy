@@ -19,12 +19,11 @@
 package bokchoy
 
 import (
-	"strings"
 	"sync"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
-	"github.com/qioalice/ekago/v2/ekalog"
-	"github.com/qioalice/ekago/v2/ekaunsafe"
+	"github.com/qioalice/ekago/v3/ekaerr"
+	"github.com/qioalice/ekago/v3/ekalog"
+	"github.com/qioalice/ekago/v3/ekaunsafe"
 )
 
 type (
@@ -48,6 +47,7 @@ type (
 
 // New initializes a new Bokchoy instance.
 func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to create a new Bokchoy instance. "
 
 	defaultOptionsCopy := *defaultOptions
 	optionsObject := &defaultOptionsCopy
@@ -64,13 +64,13 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 
 	case optionsObject.Broker == nil:
 		return nil, ekaerr.InitializationFailed.
-			New("Bokchoy: Broker must be presented. " +
+			New(s + "Broker must be presented. " +
 				"Use WithBroker() option as a part of constructor argument").
 			Throw()
 
 	case optionsObject.Serializer == nil:
 		return nil, ekaerr.InitializationFailed.
-			New("Bokchoy: Serializer must be presented. " +
+			New(s + "Serializer must be presented. " +
 				"Use WithSerializer() option as a part of constructor argument").
 			Throw()
 	}
@@ -78,48 +78,27 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 	// Validate options part 2.
 	// Now it's only warning messages.
 
-	logger := ekalog.WithThis() // an easy way to get default logger
+	logger := ekalog.Copy() // an easy way to get default logger
 	// User can "disable" logging passing nil or invalid logger.
 	// Thus there is no either nil check nor logger.IsValid() call.
-	if optionsObject.loggerIsPresented {
+	if optionsObject.Logger != nil {
 		logger = optionsObject.Logger
 	}
 
-	if ekaunsafe.TakeRealAddr(optionsObject.Broker) == nil && logger.IsValid() {
+	if ekaunsafe.TakeRealAddr(optionsObject.Broker) == nil {
 		logger.Warn("Bokchoy.Initialization: " +
 			"You present a Broker with nil underlying address value. It's ok?")
 	}
 
-	if ekaunsafe.TakeRealAddr(optionsObject.Serializer) == nil && logger.IsValid() {
+	if ekaunsafe.TakeRealAddr(optionsObject.Serializer) == nil {
 		logger.Warn("Bokchoy.Initialization: " +
 			"You present a Serializer with nil underlying address value. It's ok?")
-	}
-
-	if !optionsObject.Initialize && logger.IsValid() {
-		logger.Warn("Bokchoy.Initialization: " +
-			"You did not present initialize option (WithInitialize(true)). " +
-			"Do you already initialize your broker manually?")
 	}
 
 	// todo TTL <= 0 -> immortal tasks overflow RAM
 
 	// Options has been validated.
 	// It's OK and safe to proceed.
-
-	if optionsObject.Initialize {
-
-		if logger.IsValid() {
-			logger.Debug("Bokchoy.Initialization: " +
-				"Initialize presented Broker...",
-				"bokchoy_broker", optionsObject.Broker.String())
-		}
-
-		if logger.IsValid() {
-			logger.Debug("Bokchoy.Initialization: " +
-				"Initialized successfully. Ready to use.",
-				"bokchoy_broker", optionsObject.Broker.String())
-		}
-	}
 
 	bok := &Bokchoy{
 		broker:         optionsObject.Broker,
@@ -143,10 +122,10 @@ func New(options ...Option) (*Bokchoy, *ekaerr.Error) {
 	return bok, nil
 }
 
-// Queue gets or creates a new.
+// Queue gets or creates a new queue.
 //
 // If Run() has been called already, the new queue's consumers will be start
-// immediately (if it's a new queue, and if Bokchan has not been stopped yet).
+// immediately (if it's a new queue, and if Bokchoy has not been stopped yet).
 //
 // If queue with the given 'name' has already declared,
 // the Queue method just returns it, but if at least one Option is provided
@@ -181,8 +160,6 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 			wg:       b.wg,
 			handlers: b.handlers,
 		}
-
-		q.taskIdGen.init()
 		b.queues[name] = q
 	}
 
@@ -191,10 +168,11 @@ func (b *Bokchoy) Queue(name string, options ...Option) *Queue {
 
 // Run runs the system and block the current goroutine.
 func (b *Bokchoy) Run() *ekaerr.Error {
+	const s = "Bokchoy: Failed to run the whole Bokchoy broker. "
 
 	if !b.isValid() {
 		return ekaerr.InitializationFailed.
-			New("Bokchoy: Bokchoy is not initialized. " +
+			New(s + "Bokchoy is not initialized. " +
 				"Did you just create an object instead of using constructor or initializer?")
 	}
 
@@ -204,16 +182,15 @@ func (b *Bokchoy) Run() *ekaerr.Error {
 	if b.isStarted {
 		b.sema.Unlock()
 		return ekaerr.RejectedOperation.
-			New("Bokchoy: Bokchoy already running").
+			New(s + "Bokchoy: Bokchoy already running").
 			Throw()
 	}
 
-	queuesList := strings.Join(b.queueNames(), ", ")
+	queuesList := b.queueNames()
 
-	if b.logger.IsValid() {
-		b.logger.Debug("Bokchoy: Starting queues and their consumers...",
-			"bokchoy_queues_list", queuesList)
-	}
+	b.logger.Copy().
+		WithArray("bokchoy_queues_list", queuesList).
+		Debug("Bokchoy: Starting queues and their consumers...")
 
 	for _, queue := range b.queues {
 		queue.start()
@@ -222,10 +199,9 @@ func (b *Bokchoy) Run() *ekaerr.Error {
 	b.isStarted = true
 	b.sema.Unlock()
 
-	if b.logger.IsValid() {
-		b.logger.Debug("Bokchoy: Queues and their consumers has been started.",
-			"bokchoy_queues_list", queuesList)
-	}
+	b.logger.Copy().
+		WithArray("bokchoy_queues_list", queuesList).
+		Debug("Bokchoy: Queues and their consumers has been started.")
 
 	b.wg.Wait()
 	return nil
@@ -250,21 +226,19 @@ func (b *Bokchoy) Stop() {
 		return
 	}
 
-	queuesList := strings.Join(b.queueNames(), ", ")
+	queuesList := b.queueNames()
 
-	if b.logger.IsValid() {
-		b.logger.Debug("Bokchoy: Stopping queues and their consumers...",
-			"bokchoy_queues_list", queuesList)
-	}
+	b.logger.Copy().
+		WithArray("bokchoy_queues_list", queuesList).
+		Debug("Bokchoy: Stopping queues and their consumers...")
 
 	for _, queue := range b.queues {
 		queue.stop() // can not fail
 	}
 
-	if b.logger.IsValid() {
-		b.logger.Debug("Bokchoy: Queues and their consumers has been stopped.",
-			"bokchoy_queues_list", queuesList)
-	}
+	b.logger.Copy().
+		WithArray("bokchoy_queues_list", queuesList).
+		Debug("Bokchoy: Queues and their consumers has been stopped.")
 }
 
 // Use append a new middleware to the system.
@@ -277,10 +251,11 @@ func (b *Bokchoy) Use(queueName string, handlers ...HandlerFunc) *Bokchoy {
 // Returns an error of the first queue that can not be emptied.
 // Does nothing (but returns an error) if Bokchoy already running (Run() has called).
 func (b *Bokchoy) Empty() *ekaerr.Error {
+	const s = "Bokchoy: Failed to empty all initialized queues. "
 
 	if !b.isValid() {
 		return ekaerr.InitializationFailed.
-			New("Bokchoy: Bokchoy is not initialized. " +
+			New(s + "Bokchoy is not initialized. " +
 				"Did you just create an object instead of using constructor or initializer?")
 	}
 
@@ -289,15 +264,13 @@ func (b *Bokchoy) Empty() *ekaerr.Error {
 
 	if b.isStarted {
 		return ekaerr.RejectedOperation.
-			New("Bokchoy: Bokchoy is running").
+			New(s + "Bokchoy: Bokchoy is running").
 			Throw()
 	}
 
 	for _, queue := range b.queues {
 		if err := queue.Empty(); err.IsNotNil() {
-			return err.
-				AddMessage("Bokchoy: Failed to empty all queues").
-				Throw()
+			return err.AddMessage(s).Throw()
 		}
 	}
 
@@ -307,10 +280,11 @@ func (b *Bokchoy) Empty() *ekaerr.Error {
 // ClearAll clears all queues in the broker and also removes all metadata.
 // Does nothing (but returns an error) if Bokchoy already running (Run() has called).
 func (b *Bokchoy) ClearAll() *ekaerr.Error {
+	const s = "Bokchoy: Failed to clear all queues with its metadata. "
 
 	if !b.isValid() {
 		return ekaerr.InitializationFailed.
-			New("Bokchoy: Bokchoy is not initialized. " +
+			New(s + "Bokchoy is not initialized. " +
 				"Did you just create an object instead of using constructor or initializer?")
 	}
 
@@ -319,29 +293,24 @@ func (b *Bokchoy) ClearAll() *ekaerr.Error {
 
 	if b.isStarted {
 		return ekaerr.RejectedOperation.
-			New("Bokchoy: Bokchoy is running").
+			New(s + "Bokchoy: Bokchoy is running").
 			Throw()
 	}
 
-	return b.broker.ClearAll()
+	err := b.broker.ClearAll()
+	return err.AddMessage(s).Throw()
 }
 
 // Publish publishes a new payload to a queue.
-func (b *Bokchoy) Publish(
+func (b *Bokchoy) Publish(queueName string, payload interface{}, options ...Option) (*Task, *ekaerr.Error) {
+	const s = "Bokchoy: Failed to create and publish new task. "
 
-	queueName string,
-	payload   interface{},
-	options   ...Option,
-) (
-	*Task,
-	*ekaerr.Error,
-) {
 	if !b.isValid() {
 		return nil, ekaerr.InitializationFailed.
-			New("Bokchoy: Bokchoy is not initialized. " +
+			New(s + "Bokchoy is not initialized. " +
 				"Did you just create an object instead of using constructor or initializer?")
 	}
 
-	return b.Queue(queueName).Publish(payload, options...)
+	task, err := b.Queue(queueName).Publish(payload, options...)
+	return task, err.AddMessage(s).Throw()
 }
-

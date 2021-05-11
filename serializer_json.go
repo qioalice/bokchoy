@@ -21,7 +21,7 @@ package bokchoy
 import (
 	"encoding/hex"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 
 	"github.com/davecgh/go-spew/spew" // deep dumper
 	"github.com/json-iterator/go"     // fast than encoding/json
@@ -81,11 +81,10 @@ func (z serializerJSON) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 		if t := reflect2.TypeOf(v); t.RType() != z.typ.RType() {
 			return nil, ekaerr.IllegalArgument.
 				New(s + "Unexpected data type. Must be the same as used in constructor.").
-				AddFields(
-					"bokchoy_serializer_want_rtype", z.typ.RType(),
-					"bokchoy_serializer_want_type",  z.typ.String(),
-					"bokchoy_serializer_got_rtype",  t.RType(),
-					"bokchoy_serializer_got_type",   t.String()).
+				WithUintptr("bokchoy_serializer_want_rtype", z.typ.RType()).
+				WithStringer("bokchoy_serializer_want_type", z.typ).
+				WithUintptr("bokchoy_serializer_got_rtype", t.RType()).
+				WithStringer("bokchoy_serializer_got_type", t).
 				Throw()
 		}
 	}
@@ -105,9 +104,8 @@ func (z serializerJSON) Dumps(v interface{}) ([]byte, *ekaerr.Error) {
 
 		return nil, ekaerr.InternalError.
 			Wrap(legacyErr, s).
-			AddFields(
-				"bokchoy_serializer_obj_data", spew.Sdump(v),
-				"bokchoy_serializer_obj_type", vType).
+			WithString("bokchoy_serializer_obj_data", spew.Sdump(v)).
+			WithString("bokchoy_serializer_obj_type", vType).
 			Throw()
 	}
 
@@ -136,18 +134,15 @@ func (z serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 		if v == nil {
 			return ekaerr.IllegalArgument.
 				New(s + "Nil pointer destination.").
-				AddFields(
-					"bokchoy_serializer_want_rtype", z.typ.RType(),
-					"bokchoy_serializer_want_type",  z.typ.String()).
+				WithUintptr("bokchoy_serializer_want_rtype", z.typ.RType()).
+				WithStringer("bokchoy_serializer_want_type", z.typ).
 				Throw()
 		}
 		injectDest = z.typ.New()
 		legacyErr = jsoniter.Unmarshal(data, injectDest)
 	} else {
 		if v == nil {
-			return ekaerr.IllegalArgument.
-				New(s + "Nil pointer destination.").
-				Throw()
+			return ekaerr.IllegalArgument.New(s + "Nil pointer destination.").Throw()
 		}
 		legacyErr = jsoniter.Unmarshal(data, v)
 	}
@@ -160,9 +155,8 @@ func (z serializerJSON) Loads(data []byte, v *interface{}) *ekaerr.Error {
 
 		return ekaerr.InternalError.
 			Wrap(legacyErr, s).
-			AddFields(
-				"bokchoy_serializer_raw_data_as_hex",  hex.EncodeToString(data),
-				"bokchoy_serializer_destination_type", vType).
+			WithString("bokchoy_serializer_raw_data_as_hex", hex.EncodeToString(data)).
+			WithString("bokchoy_serializer_destination_type", vType).
 			Throw()
 	}
 

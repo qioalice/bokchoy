@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 )
 
 type (
@@ -109,17 +109,15 @@ func (c *consumer) consumeLoop() {
 		tasks, err := c.queue.Consume()
 		c.countErrorIfAny(err)
 
-		switch {
+		if len(tasks) > 0 {
 
-		case len(tasks) > 0 && c.queue.parent.logger.IsValid():
-			c.queue.parent.logger.Debug("Bokchoy: Received tasks to consume.",
-				"bokchoy_queue_name",             c.queue.name,
-				"bokchoy_tasks_received",         len(tasks),
-				"bokchoy_queue_consumsers_idx",   c.idx,
-				"bokchoy_queue_consumers_number", len(c.queue.consumers))
-			fallthrough
+			c.queue.parent.logger.Copy().
+				WithString("bokchoy_queue_name", c.queue.name).
+				WithInt("bokchoy_tasks_received", len(tasks)).
+				WithInt8("bokchoy_queue_consumers_idx", c.idx).
+				WithInt("bokchoy_queue_consumers_number", len(c.queue.consumers)).
+				Debug("Bokchoy: Received tasks to consume.")
 
-		case len(tasks) > 0:
 			for i, n := 0, len(tasks); i < n; i++ {
 				err = c.processTask(&tasks[i])
 				c.countErrorIfAny(err)
@@ -143,11 +141,10 @@ func (c *consumer) consumeLoop() {
 func (c *consumer) processTask(t *Task) *ekaerr.Error {
 	const s = "Bokchoy: Failed to process task under consuming. "
 
-	if c.queue.parent.logger.IsValid() {
-		c.queue.parent.logger.Debug("Bokchoy: Task processing is started.",
-			"bokchoy_queue_name", c.queue.name,
-			"bokchoy_task_id",    t.id)
-	}
+	c.queue.parent.logger.Copy().
+		WithString("bokchoy_queue_name", c.queue.name).
+		WithString("bokchoy_task_id", t.id).
+		Debug("Bokchoy: Task processing is started.")
 
 	if t.Timeout != 0 {
 		var (
@@ -163,12 +160,12 @@ func (c *consumer) processTask(t *Task) *ekaerr.Error {
 		case _, _ = <- doneChan: // will be closed in c.fire()
 		case _, _ = <- timeoutTimer.C:
 			t.markAsTimedOut()
-			if c.queue.parent.logger.IsValid() {
-				c.queue.parent.logger.Warn(s + "Timed out.",
-					"bokchoy_task_id",      t.id,
-					"bokchoy_task_timeout", t.Timeout,
-					"bokchoy_queue_name",   c.queue.name)
-			}
+
+			c.queue.parent.logger.Copy().
+				WithString("bokchoy_queue_name", c.queue.name).
+				WithString("bokchoy_task_id", t.id).
+				WithDuration("bokchoy_task_timeout", t.Timeout).
+				Errorw(s + "Timed out.")
 		}
 
 		timeoutTimer.Stop() // GC timer
@@ -176,28 +173,25 @@ func (c *consumer) processTask(t *Task) *ekaerr.Error {
 		c.fire(nil, t)
 	}
 
+	var err *ekaerr.Error
+
 	if t.status == TASK_STATUS_RETRYING {
 
 		// FIRST: calculating next ETA, THEN: decreasing MaxRetries.
-		// NOT VICE VERSA! PANIC OTHERWISE, INDEX OUT OF RANGE IN (*Task).nextETA().
+		// EXACTLY THAT ODER! PANIC OTHERWISE, INDEX OUT OF RANGE IN Task.nextETA().
+
 		t.ETA = t.nextETA()
 		t.MaxRetries--
 
-		if err := c.queue.PublishTask(t); err.IsNotNil() {
-			return err.
-				AddMessage(s + "Failed to return failed task to the pool " +
-					"for being retried later.").
-				Throw()
-		}
+		err = c.queue.PublishTask(t).
+			AddMessage(s + "Failed to return failed task to the pool for being retried later.")
+
 	} else {
-		if err := c.queue.save(t); err.IsNotNil() {
-			return err.
-				AddMessage(s + "Failed to save processed task.").
-				Throw()
-		}
+		err = c.queue.save(t).
+			AddMessage(s + "Failed to save processed task.")
 	}
 
-	return nil
+	return err.Throw()
 }
 
 // countErrorIfAny implements 95% of starting/stopping/freezing master/slave
@@ -228,24 +222,17 @@ func (c *consumer) countErrorIfAny(err *ekaerr.Error) {
 		if queueConsumeErrorCounter >= _CONSUMER_MAX_ERRORS_IN_A_ROW {
 			queueConsumeErrorCounter = _CONSUMER_MAX_ERRORS_IN_A_ROW
 
-			if c.queue.parent.logger.IsValid() {
-				err.LogAsErrorUsing(c.queue.parent.logger, s +
-					"Error limit is reached. " +
-					"All consumers but one will be freeze until error is get out.",
-					queueConsumeErrorCounter)
-			}
+			const s1 = s + "Error limit is reached. All consumers but one will be freeze until error is get out."
+			c.queue.parent.logger.Errore(s1, err, queueConsumeErrorCounter)
 
 			atomic.StoreInt32(&c.status, _CONSUMER_STATUS_FROZEN)
 			return
-		} else {
 
-			if c.queue.parent.logger.IsValid() {
-				err.LogAsErrorUsing(c.queue.parent.logger, s +
-					"Another %d errors and all but one consumers will be temporary stopped.",
-					queueConsumeErrorCounter,
-					_CONSUMER_MAX_ERRORS_IN_A_ROW - queueConsumeErrorCounter)
-			}
+		} else {
+			const s1 = s + "Another %d errors and all but one consumers will be temporary stopped."
+			c.queue.parent.logger.Errore(s1, err, queueConsumeErrorCounter, _CONSUMER_MAX_ERRORS_IN_A_ROW - queueConsumeErrorCounter)
 		}
+
 	} else {
 
 		// Reset Queue's error counter.
@@ -341,9 +328,9 @@ func (c *consumer) fireEvents(task *Task) {
 	const s = "Bokchoy: Failed to call task status changed callbacks. "
 
 	var (
-		handlers  []HandlerFunc
+		i = 0
+		handlers []HandlerFunc
 		oldStatus TaskStatus
-		i         = 0
 	)
 
 	for ; i < _TASK_MAX_STATUS_CHANGED_CALLBACKS_FIRING; i++ {
@@ -374,15 +361,16 @@ func (c *consumer) fireEvents(task *Task) {
 		}
 	}
 
-	if i < _TASK_MAX_STATUS_CHANGED_CALLBACKS_FIRING ||
-			!c.queue.parent.logger.IsValid() {
+	if i < _TASK_MAX_STATUS_CHANGED_CALLBACKS_FIRING {
 		return
 	}
 
-	ekaerr.Interrupted.
+	err := ekaerr.Interrupted.
 		New("Too many status changes.").
-		AddFields("bokchoy_last_status", task.status.String()).
-		LogAsWarnUsing(c.queue.parent.logger, s,
-			"bokchoy_task_id",    task.id,
-			"bokchoy_queue_name", c.queue.name)
+		WithStringer("bokchoy_last_status", task.status)
+
+	c.queue.parent.logger.Copy().
+		WithString("bokchoy_queue_name", c.queue.name).
+		WithString("bokchoy_task_id", task.id).
+		Errore(s, err)
 }

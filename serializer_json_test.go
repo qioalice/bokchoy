@@ -21,6 +21,8 @@ package bokchoy_test
 import (
 	"testing"
 
+	"github.com/qioalice/ekago/v3/ekalog"
+
 	"github.com/qioalice/bokchoy"
 
 	"github.com/davecgh/go-spew/spew"
@@ -38,10 +40,13 @@ func TestSerializerJSON(t *testing.T) {
 
 	t1.I = 42
 	t1G, err := ser.Dumps(t1)
-	err.LogAsFatal()
+	ekalog.Emerge("", err)
 
-	ser.Loads([]byte(JSON), &t2).LogAsFatal()
-	ser.Loads(t1G, &t3).LogAsFatal()
+	err = ser.Loads([]byte(JSON), &t2)
+	ekalog.Emerge("", err)
+
+	err = ser.Loads(t1G, &t3)
+	ekalog.Emerge("", err)
 
 	require.Equal(t, t1, t2)
 	require.Equal(t, t1, t3)

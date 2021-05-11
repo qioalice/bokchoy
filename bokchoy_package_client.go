@@ -19,28 +19,27 @@
 package bokchoy
 
 import (
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 )
 
 func Init(options ...Option) *ekaerr.Error {
+	const s = "Bokchoy: Failed to initialize default broker. "
 
 	defaultClient.sema.Lock()
 	defer defaultClient.sema.Unlock()
 
 	if defaultClient.isValid() {
 		return ekaerr.InitializationFailed.
-			New("Bokchoy: Already initialized. Do you call Init() twice?").
+			New(s + "Already initialized. Do you call Init() twice?").
 			Throw()
 	}
 
-	defaultClient_, err := New(options...)
-	if err.IsNotNil() {
-		return err.
-			AddMessage("Bokchoy: Failed to initialize default client").
-			Throw()
+	if defaultClient_, err := New(options...); err.IsNotNil() {
+		return err.AddMessage(s).Throw()
+	} else {
+		defaultClient = defaultClient_
 	}
 
-	defaultClient = defaultClient_
 	return nil
 }
 
@@ -49,8 +48,7 @@ func GetQueue(name string, options ...Option) *Queue {
 }
 
 func Run() *ekaerr.Error {
-	return defaultClient.Run().
-		Throw()
+	return defaultClient.Run().Throw()
 }
 
 func Stop() {
@@ -58,30 +56,18 @@ func Stop() {
 }
 
 func Use(queueName string, handlers ...HandlerFunc) *Bokchoy {
-	// TODO: Too much handlers slice copying
 	return defaultClient.Use(queueName, handlers...)
 }
 
 func Empty() *ekaerr.Error {
-	return defaultClient.Empty().
-		Throw()
+	return defaultClient.Empty().Throw()
 }
 
 func ClearAll() *ekaerr.Error {
-	return defaultClient.ClearAll().
-		Throw()
+	return defaultClient.ClearAll().Throw()
 }
 
-func Publish(
-
-	queueName string,
-	payload   interface{},
-	options   ...Option,
-) (
-	*Task,
-	*ekaerr.Error,
-) {
+func Publish(queueName string, payload interface{}, options ...Option) (*Task, *ekaerr.Error) {
 	task, err := defaultClient.Publish(queueName, payload, options...)
-	return task, err.
-		Throw()
+	return task, err.Throw()
 }

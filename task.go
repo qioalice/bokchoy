@@ -22,9 +22,9 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
-	"github.com/qioalice/ekago/v2/ekatime"
-	"github.com/qioalice/ekago/v2/ekaunsafe"
+	"github.com/qioalice/ekago/v3/ekaerr"
+	"github.com/qioalice/ekago/v3/ekatime"
+	"github.com/qioalice/ekago/v3/ekaunsafe"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -143,7 +143,7 @@ func (t *Task) Serialize(userPayloadSerializer Serializer) ([]byte, *ekaerr.Erro
 	case !t.isValid():
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Task is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_task_why_invalid", t.whyInvalid()).
+			WithString("bokchoy_task_why_invalid", t.whyInvalid()).
 			Throw()
 
 	case userPayloadSerializer == nil:
@@ -165,29 +165,26 @@ func (t *Task) Serialize(userPayloadSerializer Serializer) ([]byte, *ekaerr.Erro
 		if err.IsNotNil() {
 			return nil, err.
 				AddMessage(s + "Failed to serialize user payload.").
-				AddFields(
-					"bokchoy_task_id", t.ID,
-					"bokchoy_task_user_payload", spew.Sdump(t.Payload)).
+				WithString("bokchoy_task_id", t.id).
+				WithString("bokchoy_task_user_payload", spew.Sdump(t.Payload)).
 				Throw()
 		}
 		t.payloadEncoded = encodedPayload
-
 	}
 
 	output, legacyErr := t.toMsgpackView().MarshalMsg(nil)
 	if legacyErr != nil {
 		return nil, ekaerr.ExternalError.
 			Wrap(legacyErr, s + "Failed to encode task object.").
-			AddFields(
-				"bokchoy_task_id", t.ID,
-				"bokchoy_user_payload", spew.Sdump(t.Payload)).
+			WithString("bokchoy_task_id", t.id).
+			WithString("bokchoy_task_user_payload", spew.Sdump(t.Payload)).
 			Throw()
 	}
 
 	return output, nil
 }
 
-// TaskFromPayload returns a Task instance from raw data.
+// Deserialize returns a Task instance from raw data.
 func (t *Task) Deserialize(data []byte, userPayloadSerializer Serializer) *ekaerr.Error {
 	const s = "Bokchoy: Failed to decode task using msgpack. "
 	switch {
@@ -211,18 +208,14 @@ func (t *Task) Deserialize(data []byte, userPayloadSerializer Serializer) *ekaer
 	if legacyErr != nil {
 		return ekaerr.ExternalError.
 			Wrap(legacyErr, s + "Failed to decode task object.").
-			AddFields("bokchoy_task_encoded", string(data)).
+			WithString("bokchoy_task_encoded_as_hex", hex.EncodeToString(data)).
 			Throw()
 	}
 
-	err := userPayloadSerializer.Loads(t.payloadEncoded, &t.Payload)
-	if err.IsNotNil() {
-		return err.
-			AddMessage(s + "Failed to deserialize user payload.").
-			AddFields(
-				"bokchoy_task_id", t.ID,
-				"bokchoy_task_user_payload_encoded", string(t.payloadEncoded),
-				"bokchoy_task_user_payload_encoded_as_hex", hex.EncodeToString(t.payloadEncoded)).
+	if err := userPayloadSerializer.Loads(t.payloadEncoded, &t.Payload); err.IsNotNil() {
+		return err.AddMessage(s + "Failed to deserialize user payload.").
+			WithString("bokchoy_task_id", t.id).
+			WithString("bokchoy_task_user_payload_as_hex", hex.EncodeToString(t.payloadEncoded)).
 			Throw()
 	}
 

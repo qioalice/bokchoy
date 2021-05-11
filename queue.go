@@ -23,7 +23,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -52,7 +52,6 @@ type (
 		options        *options
 
 		name           string  // set by Bokchoy.Queue(), immutable
-		taskIdGen      taskIdGen
 
 		consumers      []consumer
 		wg             *sync.WaitGroup
@@ -103,13 +102,10 @@ func (q *Queue) Use(callback ...HandlerFunc) *Queue {
 	q.parent.sema.Lock()
 	defer q.parent.sema.Unlock()
 
-	switch {
-	case q.parent.isStarted && q.parent.logger.IsValid():
-		q.parent.logger.Warn(s + "Consumers already running.",
-			"bokchoy_queue_name", q.name)
-		fallthrough
-
-	case q.parent.isStarted:
+	if q.parent.isStarted {
+		q.parent.logger.Copy().
+			WithString("bokchoy_queue_name", q.name).
+			Warnw(s + "Consumers already running.")
 		return q
 	}
 
@@ -167,19 +163,17 @@ func (q *Queue) Empty() *ekaerr.Error {
 	if !q.isValid() {
 		return ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
 	if err := q.parent.broker.Empty(q.name); err.IsNotNil() {
-		return err.
-			Throw()
+		return err.AddMessage(s).Throw()
 	}
 
-	if q.parent.logger.IsValid() {
-		q.parent.logger.Debug("Bokchoy: Queue has been emptied",
-			"bokchoy_queue_name", q.name)
-	}
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		Debug("Bokchoy: Queue has been emptied")
 
 	return nil
 }
@@ -192,32 +186,24 @@ func (q *Queue) Cancel(taskID string) (*Task, *ekaerr.Error) {
 	case !q.isValid():
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 
 	case taskID == "":
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Task ID is empty.").
-			AddFields("bokchoy_queue_name", q.name).
+			WithString("bokchoy_queue_name", q.name).
 			Throw()
 	}
 
 	task, err := q.Get(taskID)
-	if err != nil {
-		return nil, err.
-			AddMessage(s).
-			Throw()
+
+	if err.IsNil() {
+		task.MarkAsCanceled()
+		err = q.save(task)
 	}
 
-	task.MarkAsCanceled()
-
-	if err = q.save(task); err != nil {
-		return nil, err.
-			AddMessage(s).
-			Throw()
-	}
-
-	return task, nil
+	return task, err.AddMessage(s).Throw()
 }
 
 // List returns tasks from the broker.
@@ -228,22 +214,18 @@ func (q *Queue) List() ([]Task, *ekaerr.Error) {
 	case !q.isValid():
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
 	encodedTasks, err := q.parent.broker.List(q.name)
-	if err != nil {
-		return nil, err.
-			AddMessage(s).
-			Throw()
+	if err.IsNotNil() {
+		return nil, err.AddMessage(s).Throw()
 	}
 
 	tasks, err := q.decodeTasks(encodedTasks)
 	if err.IsNotNil() {
-		return nil, err.
-			AddMessage(s).
-			Throw()
+		return nil, err.AddMessage(s).Throw()
 	}
 
 	return tasks, nil
@@ -258,53 +240,40 @@ func (q *Queue) Get(taskID string) (*Task, *ekaerr.Error) {
 	case !q.isValid():
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 
 	case taskID == "":
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Task ID is empty.").
-			AddFields("bokchoy_queue_name", q.name).
+			WithString("bokchoy_queue_name", q.name).
 			Throw()
 	}
 
-	var (
-		encodedTask []byte
-		task        Task
-		err         *ekaerr.Error
-	)
+	var task Task
 
-	switch encodedTask, err =
-		q.parent.broker.Get(q.name, taskID); {
+	encodedTask, err := q.parent.broker.Get(q.name, taskID)
 
-	case err.IsNotNil():
-		return nil, err.
-			AddMessage(s).
-			AddFields(
-				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id",    taskID).
-			Throw()
-
-	case len(encodedTask) == 0:
+	if err.IsNil() && len(encodedTask) == 0 {
 		return nil, nil
 	}
 
-	switch err =
-		task.Deserialize(encodedTask, q.options.Serializer); {
+	if err.IsNil() {
+		err = task.Deserialize(encodedTask, q.options.Serializer)
+	}
 
-	case err.IsNotNil():
+	if err.IsNotNil() {
 		return nil, err.
 			AddMessage(s).
-			AddFields(
-				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id",    taskID)
-
-	case q.parent.logger.IsValid():
-		q.parent.logger.Debug("Bokchoy: Task has been retrieved",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id",    task.id)
-
+			WithString("bokchoy_queue_name", q.name).
+			WithString("bokchoy_task_id", taskID).
+			Throw()
 	}
+
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		WithString("bokchoy_task_id", task.id).
+		Debug("Bokchoy: Task has been retrieved")
 
 	return &task, nil
 }
@@ -319,19 +288,12 @@ func (q *Queue) Count() (BrokerStats, *ekaerr.Error) {
 	if !q.isValid() {
 		return BrokerStats{}, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
 	stats, err := q.parent.broker.Count(q.name)
-	if err.IsNotNil() {
-		return BrokerStats{}, err.
-			AddMessage(s).
-			AddFields("bokchoy_queue_name", q.name).
-			Throw()
-	}
-
-	return stats, nil
+	return stats, err.AddMessage(s).WithString("bokchoy_queue_name", q.name).Throw()
 }
 
 // Consume returns an array of tasks.
@@ -341,36 +303,21 @@ func (q *Queue) Consume() ([]Task, *ekaerr.Error) {
 	if !q.isValid() {
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
-	var (
-		encodedTasks [][]byte
-		tasks        []Task
-		err          *ekaerr.Error
-	)
+	var tasks []Task
 
-	switch encodedTasks, err =
-		q.parent.broker.Consume(q.name, 0); {
+	encodedTasks, err := q.parent.broker.Consume(q.name, 0)
 
-	case err.IsNotNil():
-		return nil, err.
-			AddMessage(s).
-			AddFields("bokchoy_queue_name", q.name).
-			Throw()
+	if err.IsNil() {
+		tasks, err = q.decodeTasks(encodedTasks)
+	} else {
+		err.WithString("bokchoy_queue_name", q.name)
 	}
 
-	switch tasks, err =
-		q.decodeTasks(encodedTasks); {
-
-	case err.IsNotNil():
-		return nil, err.
-			AddMessage(s).
-			Throw()
-	}
-
-	return tasks, nil
+	return tasks, err.AddMessage(s).Throw()
 }
 
 // NewTask returns a new Task instance from payload and options.
@@ -388,74 +335,52 @@ func (q *Queue) NewTask(payload interface{}, options ...Option) *Task {
 //
 func (q *Queue) Publish(payload interface{}, options ...Option) (*Task, *ekaerr.Error) {
 	const s = "Bokchoy: Failed to publish task to the queue. "
-	switch {
 
-	case !q.isValid():
+	if !q.isValid() {
 		return nil, ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
 	task := q.newTask(payload, options)
-
 	err := q.PublishTask(task)
-	if err != nil {
-		return nil, err.
-			Throw()
-	}
 
-	return task, nil
+	return task, err.Throw()
 }
 
 // PublishTask publishes a new task to the current Queue.
 func (q *Queue) PublishTask(task *Task) *ekaerr.Error {
 	const s = "Bokchoy: Failed to publish task to the queue. "
-	switch {
 
-	case !q.isValid():
+	if !q.isValid() {
 		return ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
-
-	var (
-		serializedTask []byte
-		err            *ekaerr.Error
-	)
 
 	// No need to check task,
 	// because task.Serialize already has all checks.
 
-	switch serializedTask, err =
-		task.Serialize(q.options.Serializer); {
+	serializedTask, err := task.Serialize(q.options.Serializer)
+	if err.IsNotNil() {
+		return err.AddMessage(s).WithString("bokchoy_queue_name", q.name).Throw()
+	}
 
-	case err.IsNotNil():
-		return err.
-			AddMessage(s).
-			AddFields("bokchoy_queue_name", q.name).
+	if err = q.parent.broker.Publish(q.name, task.id, serializedTask, task.ETA); err.IsNotNil() {
+		return err.AddMessage(s).
+			WithString("bokchoy_queue_name", q.name).
+			WithString("bokchoy_task_id", task.id).
+			WithString("bokchoy_task_user_payload", spew.Sdump(task.Payload)).
 			Throw()
 	}
 
-	switch err =
-		q.parent.broker.Publish(q.name, task.id, serializedTask, task.ETA); {
-
-	case err.IsNotNil():
-		return err.
-			AddMessage(s).
-			AddFields(
-				"bokchoy_queue_name",        q.name,
-				"bokchoy_task_id",           task.id,
-				"bokchoy_task_user_payload", spew.Sdump(task.Payload)).
-			Throw()
-
-	case q.parent.logger.IsValid():
-		q.parent.logger.Debug("Bokchoy: Task has been published",
-			"bokchoy_queue_name",        q.name,
-			"bokchoy_task_id",           task.id,
-			"bokchoy_task_user_payload", spew.Sdump(task.Payload))
-	}
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		WithString("bokchoy_task_id", task.id).
+		//WithString("bokchoy_task_user_payload", spew.Sdump(task.Payload)).
+		Debug("Bokchoy: Task has been published")
 
 	return nil
 }

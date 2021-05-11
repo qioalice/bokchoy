@@ -23,7 +23,7 @@ import (
 	"os"
 	"os/user"
 
-	"github.com/qioalice/ekago/v2/ekasys"
+	"github.com/qioalice/ekago/v3/ekasys"
 )
 
 // isValid reports whether current Bokchoy object is valid

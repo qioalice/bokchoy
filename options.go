@@ -21,7 +21,7 @@ package bokchoy
 import (
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekalog"
+	"github.com/qioalice/ekago/v3/ekalog"
 )
 
 // Option is an option unit.
@@ -65,18 +65,10 @@ func WithSerializer(serializer Serializer) Option {
 	}
 }
 
-// WithInitialize defines if the broker needs to be initialized.
-func WithInitialize(initialize bool) Option {
-	return func(opts *options) {
-		opts.Initialize = initialize
-	}
-}
-
 // WithLogger defines the Logger.
 func WithLogger(logger *ekalog.Logger) Option {
 	return func(opts *options) {
 		opts.Logger = logger
-		opts.loggerIsPresented = true
 	}
 }
 

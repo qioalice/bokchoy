@@ -21,7 +21,7 @@ package bokchoy
 import (
 	"unsafe"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 )
 
 type (

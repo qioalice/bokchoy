@@ -22,8 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
-	"github.com/qioalice/ekago/v2/ekatime"
+	"github.com/qioalice/ekago/v3/ekaerr"
+	"github.com/qioalice/ekago/v3/ekatime"
+	"github.com/qioalice/ekago/v3/ekatyp"
 )
 
 func (q *Queue) isValid() bool {
@@ -62,10 +63,9 @@ func (q *Queue) onFunc(taskStatus TaskStatus, f HandlerFunc) *Queue {
 	defer q.parent.sema.Unlock()
 
 	if q.parent.isStarted {
-		if q.parent.logger.IsValid() {
-			q.parent.logger.Warn(s + "Consumers already running.",
-				"bokchoy_queue_name", q.name)
-		}
+		q.parent.logger.Copy().
+			WithString("bokchoy_queue_name", q.name).
+			Warn(s + "Consumers already running.")
 		return q
 	}
 
@@ -76,30 +76,32 @@ func (q *Queue) onFunc(taskStatus TaskStatus, f HandlerFunc) *Queue {
 
 // start starts consumers.
 func (q *Queue) start() {
+	const s = "Bokchoy: Failed to start queue. "
 
 	// Do not lock/unlock q.parent.sema.
 	// Already protected by callers.
 
 	if q.options.Concurrency == 0 {
-		if q.parent.logger.IsValid() {
-			q.parent.logger.Warn("Bokchoy: Queue starting is requested " +
-				"but does not have consumers. " +
-				"Did you set negative/invalid concurrency option?",
-				"bokchoy_queue_name", q.name)
-		}
+		q.parent.logger.Copy().
+			WithString("bokchoy_queue_name", q.name).
+			Warn(s + "Queue has no consumers. " +
+				"Did you set negative/invalid concurrency option?")
 		return
 	}
 
-	handlersCount := len(q.handlers) +
-		len(q.onStart) + len(q.onSuccess) + len(q.onFailure) + len(q.onComplete)
+	handlersCount :=
+		len(q.handlers) +
+		len(q.onStart) +
+		len(q.onSuccess) +
+		len(q.onFailure) +
+		len(q.onComplete)
+
 	if handlersCount == 0 {
-		if q.parent.logger.IsValid() {
-			q.parent.logger.Warn("Bokchoy: Queue starting is requested " +
-				"but does not have registered handlers or task status changed callbacks. " +
+		q.parent.logger.Copy().
+			WithString("bokchoy_queue_name", q.name).
+			Warn(s + "Queue has no registered handlers or task status changed callbacks. " +
 				"Did you ever call Use() or any of " +
-				"OnStart(), OnComplete(), OnFailure(), OnSuccess() setters?",
-				"bokchoy_queue_name", q.name)
-		}
+				"OnStart(), OnComplete(), OnFailure(), OnSuccess() setters?")
 		return
 	}
 
@@ -110,11 +112,10 @@ func (q *Queue) start() {
 		q.consumers[i].requestStart()
 	}
 
-	if q.parent.logger.IsValid() {
-		q.parent.logger.Debug("Bokchoy: Queue consumers has been started.",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_queue_consumers_number", len(q.consumers))
-	}
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		WithInt("bokchoy_queue_consumers_number", len(q.consumers)).
+		Debug("Bokchoy: Queue consumers has been started.")
 }
 
 // stop stops consumers.
@@ -130,14 +131,14 @@ func (q *Queue) stop() {
 	for i, n := 0, len(q.consumers); i < n; i++ {
 		q.consumers[i].requestStop()
 	}
+
 	q.wg.Wait()
 	atomic.StoreInt32(&q.errCounter, 0)
 
-	if q.parent.logger.IsValid() {
-		q.parent.logger.Debug("Bokchoy: Queue consumers has been stopped.",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_queue_consumers_number", len(q.consumers))
-	}
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		WithInt("bokchoy_queue_consumers_number", len(q.consumers)).
+		Debug("Bokchoy: Queue consumers has been stopped.")
 }
 
 func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
@@ -146,14 +147,11 @@ func (q *Queue) decodeTasks(encodedTasks [][]byte) ([]Task, *ekaerr.Error) {
 	tasks := make([]Task, len(encodedTasks))
 	for i, n := 0, len(encodedTasks); i < n; i++ {
 
-		err := tasks[i].Deserialize(encodedTasks[i], q.options.Serializer)
-		if err.IsNotNil() {
-			return nil, err.
-				AddMessage(s).
-				AddFields(
-					"bokchoy_queue_name", q.name,
-					"bokchoy_decode_tasks_decoded", i,
-					"bokchoy_decode_tasks_total", len(encodedTasks)).
+		if err := tasks[i].Deserialize(encodedTasks[i], q.options.Serializer); err.IsNotNil() {
+			return nil, err.AddMessage(s).
+				WithString("bokchoy_queue_name", q.name).
+				WithInt("bokchoy_decode_tasks_decoded", i).
+				WithInt("bokchoy_decode_tasks_total", len(encodedTasks)).
 				Throw()
 		}
 	}
@@ -170,23 +168,13 @@ func (q *Queue) save(t *Task) *ekaerr.Error {
 	if !q.isValid() {
 		return ekaerr.IllegalArgument.
 			New(s + "Queue is invalid. Has it been initialized correctly?").
-			AddFields("bokchoy_queue_why_invalid", q.whyInvalid()).
+			WithString("bokchoy_queue_why_invalid", q.whyInvalid()).
 			Throw()
 	}
 
-	var (
-		encodedTask []byte
-		err         *ekaerr.Error
-	)
-
-	switch encodedTask, err =
-		t.Serialize(q.options.Serializer); {
-
-	case err.IsNotNil():
-		return err.
-			AddMessage(s).
-			AddFields("bokchoy_queue_name", q.name).
-			Throw()
+	encodedTask, err := t.Serialize(q.options.Serializer)
+	if err.IsNotNil() {
+		return err.AddMessage(s).WithString("bokchoy_queue_name", q.name).Throw()
 	}
 
 	if t.IsFinished() {
@@ -194,22 +182,17 @@ func (q *Queue) save(t *Task) *ekaerr.Error {
 	} else {
 		err = q.parent.broker.Set(q.name, t.id, encodedTask, 0)
 	}
-
-	switch {
-
-	case err.IsNotNil():
-		return err.
-			AddMessage(s).
-			AddFields(
-				"bokchoy_queue_name", q.name,
-				"bokchoy_task_id",    t.id).
+	if err.IsNotNil() {
+		return err.AddMessage(s).
+			WithString("bokchoy_queue_name", q.name).
+			WithString("bokchoy_task_id", t.id).
 			Throw()
-
-	case q.parent.logger.IsValid():
-		q.parent.logger.Debug("Bokchoy: Task has been saved",
-			"bokchoy_queue_name", q.name,
-			"bokchoy_task_id",    t.id)
 	}
+
+	q.parent.logger.Copy().
+		WithString("bokchoy_queue_name", q.name).
+		WithString("bokchoy_task_id", t.id).
+		Debug("Bokchoy: Task has been saved")
 
 	return nil
 }
@@ -233,16 +216,17 @@ func (q *Queue) newTask(payload interface{}, options []Option) *Task {
 	}
 
 	task := &Task{
-		id:          q.taskIdGen.newId(),
-		Payload:     payload,
-		status:      TASK_STATUS_WAITING,
-		PublishedAt: ekatime.Now(),
-	}
+		id:             ekatyp.ULID_New_OrNil().String(),
+		status:         TASK_STATUS_WAITING,
 
-	task.MaxRetries     = optionsObject.MaxRetries
-	task.TTL            = optionsObject.TTL
-	task.Timeout        = optionsObject.Timeout
-	task.RetryIntervals = optionsObject.RetryIntervals
+		Payload:        payload,
+		PublishedAt:    ekatime.Now(),
+
+		MaxRetries:     optionsObject.MaxRetries,
+		TTL:            optionsObject.TTL,
+		Timeout:        optionsObject.Timeout,
+		RetryIntervals: optionsObject.RetryIntervals,
+	}
 
 	if optionsObject.Countdown > 0 {
 		task.ETA = time.Now().UnixNano() + optionsObject.Countdown.Nanoseconds()

@@ -19,7 +19,7 @@
 package bokchoy
 
 import (
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 )
 
 // Serializer defines an interface to implement a serializer,

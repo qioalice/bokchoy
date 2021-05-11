@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/qioalice/ekago/v2/ekaerr"
+	"github.com/qioalice/ekago/v3/ekaerr"
 )
 
 // Broker is the common interface to define a Broker.
